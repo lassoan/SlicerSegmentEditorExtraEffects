@@ -1,0 +1,12 @@
+# Ignore all dotfiles...
+.*
+
+# Ignore all back-up files...
+*~
+*.bak
+
+# except for .gitignore
+!.gitignore
+
+# Ignore pyc files ...
+*.pyc
