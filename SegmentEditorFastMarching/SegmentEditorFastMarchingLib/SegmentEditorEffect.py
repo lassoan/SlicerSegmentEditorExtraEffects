@@ -10,6 +10,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     scriptedEffect.name = 'Fast Marching'
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
+    self.originalSelectedSegmentLabelmap = None
+    self.selectedSegmentId = None
+    self.fm = None
+    self.totalNumberOfVoxels = 0
+    self.voxelVolume = 0
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -37,37 +42,60 @@ To segment a single object, create a segment and paint inside and create another
     self.percentMax.minimum = 0
     self.percentMax.maximum = 100
     self.percentMax.singleStep = 1
-    self.percentMax.value = 30
-    self.percentMax.setToolTip('Approximate volume of the structure to be segmented relative to the total volume of the image'
-      'Segmentation will grow from the seed label until this value is reached')
+    self.percentMax.value = 10
+    self.percentMax.suffix = '%'
+    self.percentMax.setToolTip('Approximate volume of the structure to be segmented as percentage of total volume of the master image.'
+      ' Segmentation will grow from the seed label until this value is reached')
     self.percentMax.connect('valueChanged(double)', self.percentMaxChanged)
-    self.scriptedEffect.addLabeledOptionsWidget("Expected structure volume as % of image volume:", self.percentMax)
+    self.scriptedEffect.addLabeledOptionsWidget("Maximum volume:", self.percentMax)
 
-    self.march = qt.QPushButton("March")
+    self.march = qt.QPushButton("Initialize")
     self.march.setToolTip("Perform the Marching operation into the current label map")
     self.scriptedEffect.addOptionsWidget(self.march)
     self.march.connect('clicked()', self.onMarch)
 
     self.marcher = ctk.ctkSliderWidget()
     self.marcher.minimum = 0
-    self.marcher.maximum = 1
-    self.marcher.singleStep = 0.01
+    self.marcher.maximum = 100
+    self.marcher.singleStep = 0.1
+    self.marcher.pageStep = 5
+    self.marcher.suffix = '%'
     self.marcher.enabled = False
     self.marcher.connect('valueChanged(double)',self.onMarcherChanged)
-    self.scriptedEffect.addLabeledOptionsWidget("Maximum volume of the structure:", self.marcher)
+    self.percentVolume = self.scriptedEffect.addLabeledOptionsWidget("Segment volume:", self.marcher)
+    
+    self.cancelButton = qt.QPushButton("Cancel")
+    self.cancelButton.objectName = self.__class__.__name__ + 'Cancel'
+    self.cancelButton.setToolTip("Clear preview and cancel")
+
+    self.applyButton = qt.QPushButton("Apply")
+    self.applyButton.objectName = self.__class__.__name__ + 'Apply'
+    self.applyButton.setToolTip("Replace segment by previewed result")
+
+    finishFrame = qt.QHBoxLayout()
+    finishFrame.addWidget(self.cancelButton)
+    finishFrame.addWidget(self.applyButton)
+    self.scriptedEffect.addOptionsWidget(finishFrame)
+
+    self.cancelButton.connect('clicked()', self.onCancel)
+    self.applyButton.connect('clicked()', self.onApply)
 
   def createCursor(self, widget):
     # Turn off effect-specific cursor for this effect
     return slicer.util.mainWindow().cursor
 
   def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault("PercentMax", 30)
+    self.scriptedEffect.setParameterDefault("PercentMax", 10)
 
   def updateGUIFromMRML(self):
     percentMax = self.scriptedEffect.doubleParameter("PercentMax")
     wasBlocked = self.percentMax.blockSignals(True)
     self.percentMax.value = abs(percentMax)
     self.percentMax.blockSignals(wasBlocked)
+    enableApplyCancel = self.fm is not None
+    self.applyButton.enabled = enableApplyCancel
+    self.cancelButton.enabled = enableApplyCancel
+    self.marcher.enabled = enableApplyCancel
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("PercentMax", self.percentMax.value)
@@ -78,31 +106,20 @@ To segment a single object, create a segment and paint inside and create another
     try:
       slicer.util.showStatusMessage('Running FastMarching...', 2000)
       self.scriptedEffect.saveStateForUndo()
-      npoints = self.fastMarching(self.percentMax.value)
+      self.fastMarching(self.percentMax.value)
       slicer.util.showStatusMessage('FastMarching finished', 2000)
-      if npoints:
-        self.marcher.minimum = 0
-        self.marcher.maximum = npoints
-        self.marcher.value = npoints
-        self.marcher.singleStep = 1
+      self.marcher.value = 100
+      if self.totalNumberOfVoxels>0:
         self.marcher.enabled = True
     finally:
       qt.QApplication.restoreOverrideCursor()
+    self.updateGUIFromMRML()
 
   def onMarcherChanged(self,value):
     self.updateLabel(value/self.marcher.maximum)
 
   def percentMaxChanged(self, val):
-    pass
-    # labelNode = self.getLabelNode()
-    # labelImage = EditUtil.getLabelImage()
-    # spacing = labelNode.GetSpacing()
-    # dim = labelImage.GetDimensions()
-    # print dim
-    # totalVolume = spacing[0]*dim[0]+spacing[1]*dim[1]+spacing[2]*dim[2]
-
-    # percentVolumeStr = "%.5f" % (totalVolume*val/100.)
-    # self.percentVolume.text = '(maximum total volume: '+percentVolumeStr+' mL)'
+    self.updateMRMLFromGUI()
 
   def fastMarching(self,percentMax):
 
@@ -126,14 +143,12 @@ To segment a single object, create a segment and paint inside and create another
       masterImageDataShort.CopyDirections(masterImageData) # Copy geometry
       masterImageData = masterImageDataShort
 
-    # Generate merged labelmap as input to Marching
-    #mergedImage = vtkSegmentationCore.vtkOrientedImageData()
-    #virtual vtkOrientedImageData* GetBinaryLabelmapRepresentation(const std::string segmentId);
-    #segmentationNode.GetGenerateMergedLabelmapForAllSegments(mergedImage, vtkSegmentationCore.vtkSegmentation.EXTENT_UNION_OF_SEGMENTS, masterImageData)
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
     
-    self.originalSelectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
-    self.originalSelectedSegmentLabelmap.DeepCopy(selectedSegmentLabelmap)
+    if not self.originalSelectedSegmentLabelmap:
+      self.originalSelectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+      self.originalSelectedSegmentLabelmap.DeepCopy(selectedSegmentLabelmap)
+      self.selectedSegmentId = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
 
     # We need to know exactly the value of the segment voxels, apply threshold to make force the selected label value
     labelValue = 1
@@ -149,7 +164,6 @@ To segment a single object, create a segment and paint inside and create another
     
     # collect seeds
     dim = masterImageData.GetDimensions()
-    print dim
     # initialize the filter
     self.fm = slicer.vtkPichonFastMarching()
     scalarRange = masterImageData.GetScalarRange()
@@ -175,7 +189,6 @@ To segment a single object, create a segment and paint inside and create another
       scalarRange = masterImageData.GetScalarRange()
       depth = scalarRange[1]-scalarRange[0]
 
-    print('Input scalar range: '+str(depth))
     self.fm.init(dim[0], dim[1], dim[2], depth, 1, 1, 1)
 
     caster = vtk.vtkImageCast()
@@ -190,14 +203,21 @@ To segment a single object, create a segment and paint inside and create another
     self.fm.setNPointsEvolution(npoints)
     self.fm.setActiveLabel(labelValue)
 
+    spacing = self.originalSelectedSegmentLabelmap.GetSpacing()
+    self.voxelVolume = spacing[0] * spacing[1] * spacing[2]
+    self.totalNumberOfVoxels = npoints
+
     nSeeds = self.fm.addSeedsFromImage(labelImage)
     if nSeeds == 0:
-      return 0
-
+      self.totalNumberOfVoxels = 0
+      return
+      
     self.fm.Modified()
     self.fm.Update()
 
-    # TODO: need to call show() twice for data to be updated
+    # Need to call show() twice for data to be updated.
+    # There are many other issues with the vtkPichonFastMarching filter
+    # (expects extents to start at 0, crashes in debug mode, etc).
     self.fm.show(1)
     self.fm.Modified()
     self.fm.Update()
@@ -206,27 +226,48 @@ To segment a single object, create a segment and paint inside and create another
     self.fm.Modified()
     self.fm.Update()
 
-    #self.undoRedo.saveState()
-
-    #EditUtil.getLabelImage().DeepCopy(self.fm.GetOutput())
-    #EditUtil.markVolumeNodeAsModified(self.sliceLogic.GetLabelLayer().GetVolumeNode())
-    # print('FastMarching output image: '+str(output))
-    print('FastMarching march update completed')
-
-    return npoints
-
+    logging.info('FastMarching march update completed')
+    
   def updateLabel(self,value):
     if not self.fm:
       return
+     
     self.fm.show(value)
     self.fm.Modified()
     self.fm.Update()
 
     import vtkSegmentationCorePython as vtkSegmentationCore
-
     newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
     newSegmentLabelmap.ShallowCopy(self.fm.GetOutput())
     newSegmentLabelmap.CopyDirections(self.originalSelectedSegmentLabelmap)
+    
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID() 
-    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, segmentationNode, segmentID, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent()) 
+    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent()) 
+
+  def reset(self):
+
+    # If original segment is available then restore that
+    if self.originalSelectedSegmentLabelmap:
+      import vtkSegmentationCorePython as vtkSegmentationCore
+      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(self.originalSelectedSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, self.originalSelectedSegmentLabelmap.GetExtent()) 
+      
+    self.originalSelectedSegmentLabelmap = None
+    self.selectedSegmentId = None
+    self.fm = None
+    
+    self.updateGUIFromMRML()
+
+  def onCancel(self):
+    self.reset()
+
+  def onApply(self):
+    # Apply changes
+    import vtkSegmentationCorePython as vtkSegmentationCore
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    modifierLabelmap = segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId)
+    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
+    self.originalSelectedSegmentLabelmap = None
+
+    self.reset()
+    self.scriptedEffect.selectEffect("")

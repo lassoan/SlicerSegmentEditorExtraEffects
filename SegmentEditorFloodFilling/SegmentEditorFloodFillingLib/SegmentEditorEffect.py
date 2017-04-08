@@ -55,7 +55,9 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
 
   def createCursor(self, widget):
     # Turn off effect-specific cursor for this effect
-    return slicer.util.mainWindow().cursor
+    #return slicer.util.mainWindow().cursor
+    return qt.QCursor(qt.Qt.PointingHandCursor)
+    
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("IntensityTolerance", 10.0)
@@ -70,8 +72,8 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     self.neighborhoodSizeMmSlider.blockSignals(False)
 
   def updateMRMLFromGUI(self):
-    self.scriptedEffect.setParameter("IntensityTolerance", self.thresholdSlider.intensityToleranceSlider.value)
-    self.scriptedEffect.setParameter("NeighborhoodSizeMm", self.thresholdSlider.neighborhoodSizeMmSlider.value)
+    self.scriptedEffect.setParameter("IntensityTolerance", self.intensityToleranceSlider.value)
+    self.scriptedEffect.setParameter("NeighborhoodSizeMm", self.neighborhoodSizeMmSlider.value)
 
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
