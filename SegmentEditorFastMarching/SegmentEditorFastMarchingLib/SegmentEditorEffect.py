@@ -143,7 +143,7 @@ To segment a single object, create a segment and paint inside and create another
     thresh.ThresholdByLower(0)
     thresh.SetInValue(backgroundValue)
     thresh.SetOutValue(labelValue)
-    thresh.SetOutputScalarType(selectedSegmentLabelmap.GetScalarType())
+    thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_SHORT)
     thresh.Update()
     labelImage = thresh.GetOutput()    
     
@@ -221,6 +221,8 @@ To segment a single object, create a segment and paint inside and create another
     self.fm.show(value)
     self.fm.Modified()
     self.fm.Update()
+
+    import vtkSegmentationCorePython as vtkSegmentationCore
 
     newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
     newSegmentLabelmap.ShallowCopy(self.fm.GetOutput())
