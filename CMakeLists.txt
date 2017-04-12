@@ -4,12 +4,16 @@ project(SegmentEditorExtraEffects)
 
 #-----------------------------------------------------------------------------
 # Extension meta-information
-set(EXTENSION_HOMEPAGE "http://slicer.org/slicerWiki/index.php/Documentation/Nightly/Extensions/SegmentEditorExtraEffects")
+set(EXTENSION_HOMEPAGE "https://github.com/lassoan/SlicerSegmentEditorExtraEffects")
 set(EXTENSION_CATEGORY "Segmentation")
 set(EXTENSION_CONTRIBUTORS "Andras Lasso (PerkLab, Queen's)")
 set(EXTENSION_DESCRIPTION "Experimental effects for Segment Editor")
-set(EXTENSION_ICONURL "http://www.example.com/Slicer/Extensions/SegmentEditorExtraEffects.png")
-set(EXTENSION_SCREENSHOTURLS "http://www.example.com/Slicer/Extensions/SegmentEditorWatershed/Screenshots/1.png")
+set(EXTENSION_ICONURL "https://raw.githubusercontent.com/lassoan/SlicerSegmentEditorExtraEffects/master/SegmentEditorExtraEffects.png")
+set(EXTENSION_SCREENSHOTURLS
+  "https://raw.githubusercontent.com/lassoan/SlicerSegmentEditorExtraEffects/master/FastMarchingInput.png"
+  "https://raw.githubusercontent.com/lassoan/SlicerSegmentEditorExtraEffects/master/FastMarchingOutput.png"
+  "https://raw.githubusercontent.com/lassoan/SlicerSegmentEditorExtraEffects/master/WatershedOutput.png"
+  )
 set(EXTENSION_DEPENDS "NA") # Specified as a space separated string, a list or 'NA' if any
 
 #-----------------------------------------------------------------------------
