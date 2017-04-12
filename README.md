@@ -1,2 +1,3 @@
 # SlicerSegmentEditorExtraEffects
-Experimental effects for Segment Editor in 3D Slicer
+
+Experimental effects for Segment Editor in 3D Slicer.

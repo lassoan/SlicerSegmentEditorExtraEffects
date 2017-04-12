@@ -42,7 +42,8 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     self.intensityToleranceLabel = self.scriptedEffect.addLabeledOptionsWidget("Intensity tolerance:", self.intensityToleranceSlider)
 
     self.neighborhoodSizeMmSlider = ctk.ctkSliderWidget()
-    self.neighborhoodSizeMmSlider.setToolTip("Propagate only if neighborhood.")
+    self.neighborhoodSizeMmSlider.setToolTip("Regions are added only if all voxels in the neighborhood have similar intensities."
+      "Use higher values prevent leakage. Use lower values to allow capturing finer details.")
     self.neighborhoodSizeMmSlider.minimum = 0.01
     self.neighborhoodSizeMmSlider.maximum = 30.0
     self.neighborhoodSizeMmSlider.value = 1.0
