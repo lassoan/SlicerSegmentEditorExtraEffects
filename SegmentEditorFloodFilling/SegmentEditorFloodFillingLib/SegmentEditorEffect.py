@@ -106,8 +106,6 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
         # This can be a long operation - indicate it to the user
         qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
-        self.scriptedEffect.saveStateForUndo()
-
         # Perform thresholding
         floodFillingFilter = vtk.vtkImageThresholdConnectivity()       
         floodFillingFilter.SetInputData(masterImageData)
