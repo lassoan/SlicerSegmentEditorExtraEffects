@@ -31,10 +31,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
 
   def helpText(self):
-    return """Existing segments are grown to fill the image.
-The effect is different from the Grow from seeds effect in that smoothness of structures can be defined, which can prevent leakage.
-To segment a single object, create a segment and paint inside and create another segment and paint outside on each axis.
-"""
+    return """<html>Expand the selected segment<br> to regions that have similar intensity.<p>
+Only the selected segment is expanded. No background segment is needed.
+The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">fast marching method</a>.
+<p></html>"""
 
   def setupOptionsFrame(self):
 

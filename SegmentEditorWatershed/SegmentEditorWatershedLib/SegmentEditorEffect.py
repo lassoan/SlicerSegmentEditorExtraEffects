@@ -40,7 +40,7 @@ updated automatically within a few seconds</li>
 </ul><p>
 The effect is different from the Grow from seeds effect in that smoothness of structures can be defined, which can prevent leakage.<p>
 Masking settings are bypassed. If segments overlap, segment higher in the segments table will have priority.
-The effect uses <a href="https://www.spl.harvard.edu/publications/item/view/2761">fast grow-cut method</a>.
+The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalWatershedFromMarkersImageFilter.html">watershed method</a>.
 <p></html>"""
 
   def reset(self):
@@ -80,8 +80,8 @@ The effect uses <a href="https://www.spl.harvard.edu/publications/item/view/2761
   def updateAlgorithmParameterFromGUI(self):
     self.updateMRMLFromGUI()
     
+    # Trigger preview update    
     if self.getPreviewNode():
-      # Trigger an update
       self.delayedAutoUpdateTimer.start()
     
   def computePreviewLabelmap(self, mergedImage, outputLabelmap):
@@ -92,21 +92,18 @@ The effect uses <a href="https://www.spl.harvard.edu/publications/item/view/2761
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
-    # Export master image data to volume node.
-    # Note: We do not use the master volume node here, as the master volume may have been resampled to match segmentation geometry.
-    
     masterVolumeNode = slicer.vtkMRMLScalarVolumeNode()
     slicer.mrmlScene.AddNode(masterVolumeNode)
     slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(self.clippedMasterImageData, masterVolumeNode)
-    
-    rasToIjk = vtk.vtkMatrix4x4()
-    mergedImage.GetImageToWorldMatrix(rasToIjk)
-    extent = mergedImage.GetExtent()
-    
+        
     mergedLabelmapNode = slicer.vtkMRMLLabelMapVolumeNode()
     slicer.mrmlScene.AddNode(mergedLabelmapNode)
     slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(mergedImage, mergedLabelmapNode)
-        
+    
+    outputRasToIjk = vtk.vtkMatrix4x4()
+    mergedImage.GetImageToWorldMatrix(outputRasToIjk)
+    outputExtent = mergedImage.GetExtent()
+    
     # Run segmentation algorithm
     import SimpleITK as sitk
     import sitkUtils
@@ -126,24 +123,13 @@ The effect uses <a href="https://www.spl.harvard.edu/publications/item/view/2761
       labelImage = sitk.Cast(labelImage, sitk.sitkInt16)
     # Write result from SimpleITK to Slicer. This currently performs a deep copy of the bulk data.
     sitk.WriteImage(labelImage, sitkUtils.GetSlicerITKReadWriteAddress(mergedLabelmapNode.GetName()))
-
-    mergedLabelmapNode.GetImageData().Modified()
-    mergedLabelmapNode.Modified()
     
     # Update segmentation from labelmap node and remove temporary nodes
-    outputLabelmap.DeepCopy(mergedLabelmapNode.GetImageData())
-    outputLabelmap.SetImageToWorldMatrix(rasToIjk)
-    outputLabelmap.SetExtent(extent)
-    
-    #mergedLabelmapNode.GetImageData().Modified()
-    #mergedLabelmapNode.Modified()
+    outputLabelmap.ShallowCopy(mergedLabelmapNode.GetImageData())
+    outputLabelmap.SetImageToWorldMatrix(outputRasToIjk)
+    outputLabelmap.SetExtent(outputExtent)
 
-    #self.growCutFilter.SetSeedLabelVolume(mergedImage)
-    #self.growCutFilter.Update()
-
-    #outputLabelmap.DeepCopy( self.growCutFilter.GetOutput() )
-    
-    #slicer.mrmlScene.RemoveNode(masterVolumeNode)
-    #slicer.mrmlScene.RemoveNode(mergedLabelmapNode)
+    slicer.mrmlScene.RemoveNode(masterVolumeNode)
+    slicer.mrmlScene.RemoveNode(mergedLabelmapNode)
 
     qt.QApplication.restoreOverrideCursor()
