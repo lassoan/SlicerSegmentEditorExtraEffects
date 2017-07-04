@@ -42,6 +42,25 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def setupOptionsFrame(self):
     self.operationRadioButtons = []
 
+    #Fiducial Placement widget
+    self.fiducialPlacementToggle = slicer.qSlicerMarkupsPlaceWidget()
+    self.fiducialPlacementToggle.setMRMLScene(slicer.mrmlScene)
+    self.fiducialPlacementToggle.placeMultipleMarkups = self.fiducialPlacementToggle.ForcePlaceMultipleMarkups
+    self.fiducialPlacementToggle.buttonsVisible = False
+    self.fiducialPlacementToggle.show()
+    self.fiducialPlacementToggle.placeButton().show()
+    self.fiducialPlacementToggle.deleteButton().show()
+
+    # Edit surface button
+    self.editButton = qt.QPushButton("Edit")
+    self.editButton.objectName = self.__class__.__name__ + 'Edit'
+    self.editButton.setToolTip("Edit the previously placed group of fiducials.")
+
+    fiducialAction = qt.QHBoxLayout()
+    fiducialAction.addWidget(self.fiducialPlacementToggle)
+    fiducialAction.addWidget(self.editButton)
+    self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialAction)
+    
     #Operation buttons
     self.eraseInsideButton = qt.QRadioButton("Erase inside")
     self.operationRadioButtons.append(self.eraseInsideButton)
@@ -62,7 +81,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.setButton = qt.QRadioButton("Set")
     self.operationRadioButtons.append(self.setButton)
     self.buttonToOperationNameMap[self.setButton] = 'SET'
-    self.setButton.setVisible(False)
 
     #Operation buttons layout
     operationLayout = qt.QGridLayout()
@@ -72,27 +90,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     operationLayout.addWidget(self.fillOutsideButton, 1, 1)
     operationLayout.addWidget(self.setButton, 0, 2)
 
-    self.operationRadioButtons[2].setChecked(True)
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
-
-    #Fiducial Placement widget
-    self.fiducialPlacementToggle = slicer.qSlicerMarkupsPlaceWidget()
-    self.fiducialPlacementToggle.setMRMLScene(slicer.mrmlScene)
-    self.fiducialPlacementToggle.placeMultipleMarkups = self.fiducialPlacementToggle.ForcePlaceMultipleMarkups
-    self.fiducialPlacementToggle.buttonsVisible = False
-    self.fiducialPlacementToggle.show()
-    self.fiducialPlacementToggle.placeButton().show()
-    self.fiducialPlacementToggle.deleteButton().show()
-
-    # Edit surface button
-    self.editButton = qt.QPushButton("Edit previous group")
-    self.editButton.objectName = self.__class__.__name__ + 'Edit'
-    self.editButton.setToolTip("Edit the previously placed group of fiducials.")
-
-    fiducialAction = qt.QHBoxLayout()
-    fiducialAction.addWidget(self.fiducialPlacementToggle)
-    fiducialAction.addWidget(self.editButton)
-    self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialAction)
 
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
@@ -130,6 +128,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.fiducialPlacementToggle.setPlaceModeEnabled(False)
     self.setAndObserveSegmentEditorNode(self.scriptedEffect.parameterSetNode())
     self.observeSegmentation(True)
+    self.updateGUIFromMRML()
 
   def deactivate(self):
     self.reset()
@@ -141,7 +140,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return slicer.util.mainWindow().cursor
 
   def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault("Operation", "FILL_INSIDE")
+    self.scriptedEffect.setParameterDefault("Operation", "SET")
 
   def updateGUIFromMRML(self):
     if self.segmentMarkupNode:
@@ -153,7 +152,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       self.editButton.setVisible(segment.HasTag("fP"))
-      self.setButton.setVisible(not self.scriptedEffect.selectedSegmentLabelmap().IsEmpty())
+
+    operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value == self.scriptedEffect.parameter("Operation")][0]
+    operationButton.setChecked(True)
 
   #
   # Effect specific methods (the above ones are the API methods to override)
@@ -168,8 +169,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.fiducialPlacementToggle.placeButton().isChecked():
       # Create empty model node
       if self.segmentModel is None:
-        self.segmentModel = slicer.vtkMRMLModelNode()
-        slicer.mrmlScene.AddNode(self.segmentModel)
+        self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+        self.segmentModel.SetName("SegmentEditorSurfaceCutModel")
 
       # Create empty markup fiducial node
       if self.segmentMarkupNode is None:
@@ -413,80 +414,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     Update model to enclose all points in the input markup list
     """
 
-    # Delaunay triangulation is robust and creates nice smooth surfaces from a small number of points,
-    # however it can only generate convex surfaces robustly.
-    useDelaunay = True
-
-    # Create polydata point set from markup points
-
-    points = vtk.vtkPoints()
-    cellArray = vtk.vtkCellArray()
-
-    numberOfPoints = inputMarkup.GetNumberOfFiducials()
-
-    # Surface generation algorithms behave unpredictably when there are not enough points
-    # return if there are very few points
-    if useDelaunay:
-      if numberOfPoints < 3:
-        return
-    else:
-      if numberOfPoints < 10:
-        return
-
-    points.SetNumberOfPoints(numberOfPoints)
-    new_coord = [0.0, 0.0, 0.0]
-
-    for i in range(numberOfPoints):
-      inputMarkup.GetNthFiducialPosition(i, new_coord)
-      points.SetPoint(i, new_coord)
-
-    cellArray.InsertNextCell(numberOfPoints)
-    for i in range(numberOfPoints):
-      cellArray.InsertCellPoint(i)
-
-    pointPolyData = vtk.vtkPolyData()
-    pointPolyData.SetLines(cellArray)
-    pointPolyData.SetPoints(points)
-
-    # Create surface from point set
-
-    if useDelaunay:
-
-      delaunay = vtk.vtkDelaunay3D()
-      delaunay.SetInputData(pointPolyData)
-
-      surfaceFilter = vtk.vtkDataSetSurfaceFilter()
-      surfaceFilter.SetInputConnection(delaunay.GetOutputPort())
-
-      smoother = vtk.vtkButterflySubdivisionFilter()
-      smoother.SetInputConnection(surfaceFilter.GetOutputPort())
-      smoother.SetNumberOfSubdivisions(3)
-      smoother.Update()
-
-      outputModel.SetPolyDataConnection(smoother.GetOutputPort())
-
-    else:
-
-      surf = vtk.vtkSurfaceReconstructionFilter()
-      surf.SetInputData(pointPolyData)
-      surf.SetNeighborhoodSize(20)
-      surf.SetSampleSpacing(
-        80)  # lower value follows the small details more closely but more dense pointset is needed as input
-
-      cf = vtk.vtkContourFilter()
-      cf.SetInputConnection(surf.GetOutputPort())
-      cf.SetValue(0, 0.0)
-
-      # Sometimes the contouring algorithm can create a volume whose gradient
-      # vector and ordering of polygon (using the right hand rule) are
-      # inconsistent. vtkReverseSense cures this problem.
-      reverse = vtk.vtkReverseSense()
-      reverse.SetInputConnection(cf.GetOutputPort())
-      reverse.ReverseCellsOff()
-      reverse.ReverseNormalsOff()
-
-      outputModel.SetPolyDataConnection(reverse.GetOutputPort())
-
     # Create default model display node if does not exist yet
     if not outputModel.GetDisplayNode():
       modelDisplayNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLModelDisplayNode")
@@ -499,14 +426,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       modelDisplayNode.SetColor(r, g, b)  # Edited segment color
       modelDisplayNode.BackfaceCullingOff()
       modelDisplayNode.SliceIntersectionVisibilityOn()
-      modelDisplayNode.SetSliceIntersectionThickness(2)
+      modelDisplayNode.SetSliceIntersectionThickness(4)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       slicer.mrmlScene.AddNode(modelDisplayNode)
       outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-    outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
-    outputModel.Modified()
+    markupsToModel = slicer.modules.markupstomodel.logic()
+    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True) # create smooth surface from points
 
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
