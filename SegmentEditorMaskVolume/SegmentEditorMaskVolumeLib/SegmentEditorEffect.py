@@ -64,7 +64,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.inputVolumeSelector.selectNodeUponCreation = True
     self.inputVolumeSelector.addEnabled = True
     self.inputVolumeSelector.removeEnabled = True
-    self.inputVolumeSelector.noneEnabled = False
+    self.inputVolumeSelector.noneEnabled = True
+    self.inputVolumeSelector.noneDisplay = "(Master volume)"
     self.inputVolumeSelector.showHidden = False
     self.inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
     self.inputVolumeSelector.setToolTip("Volume to mask. Default is current master volume node.")
@@ -88,7 +89,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.outputVolumeSelector.addEnabled = True
     self.outputVolumeSelector.removeEnabled = True
     self.outputVolumeSelector.noneEnabled = True
-    self.outputVolumeSelector.noneDisplay = "Create new Volume"
+    self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
     self.outputVolumeSelector.showHidden = False
     self.outputVolumeSelector.setMRMLScene( slicer.mrmlScene )
     self.outputVolumeSelector.setToolTip("Masked output volume. It may be the same as the input volume for cumulative masking.")
@@ -133,6 +134,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     inputVisible = self.scriptedEffect.parameter("InputVisibility")
     outputVisible = self.scriptedEffect.parameter("OutputVisibility")
     inputVolume = self.inputVolumeSelector.currentNode()
+    if inputVolume is None:
+      inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     outputVolume = self.outputVolumeSelector.currentNode()
     masterVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     visibleIcon = qt.QIcon(":/Icons/Small/SlicerVisible.png")
@@ -140,19 +143,19 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if inputVisible == "True" and outputVisible == "True":
       self.inputVisibilityButton.setIcon(visibleIcon)
       self.outputVisibilityButton.setIcon(visibleIcon)
-      self.showInSliceViewers(inputVolume)
+      slicer.util.setSliceViewerLayers(background=inputVolume)
     elif inputVisible == "True":
       self.inputVisibilityButton.setIcon(visibleIcon)
       self.outputVisibilityButton.setIcon(invisibleIcon)
-      self.showInSliceViewers(inputVolume)
+      slicer.util.setSliceViewerLayers(background=inputVolume)
     elif outputVisible == "True":
       self.outputVisibilityButton.setIcon(visibleIcon)
       self.inputVisibilityButton.setIcon(invisibleIcon)
-      self.showInSliceViewers(outputVolume)
+      slicer.util.setSliceViewerLayers(background=outputVolume)
     else:
       self.outputVisibilityButton.setIcon(invisibleIcon)
       self.inputVisibilityButton.setIcon(invisibleIcon)
-      self.showInSliceViewers(masterVolume)
+      slicer.util.setSliceViewerLayers(background=masterVolume)
       self.inputVisibilityButton.setEnabled(False)
 
     self.inputVisibilityButton.setEnabled(not(inputVolume is masterVolume and inputVisible == "True"))
@@ -165,24 +168,29 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
 
   def activate(self):
-    self.inputVolumeSelector.setCurrentNode(self.scriptedEffect.parameterSetNode().GetMasterVolumeNode())
     self.scriptedEffect.setParameter("InputVisibility", "True")
 
   def deactivate(self):
     if self.outputVolumeSelector.currentNode() is not self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
       self.scriptedEffect.setParameter("OutputVisibility", "False")
-    self.showInSliceViewers(self.scriptedEffect.parameterSetNode().GetMasterVolumeNode())
+    slicer.util.setSliceViewerLayers(background=self.scriptedEffect.parameterSetNode().GetMasterVolumeNode())
 
   def onOperationSelectionChanged(self, operationName, toggle):
     if not toggle:
       return
     self.scriptedEffect.setParameter("Operation", operationName)
 
+  def getInputVolume(self):
+    inputVolume = self.inputVolumeSelector.currentNode()
+    if inputVolume is None:
+      inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+    return inputVolume
+    
   def onInputVisibilityButtonClicked(self):
     if self.inputVisibilityButton.isEnabled():
       if self.inputVisibilityButton.isChecked():
         self.scriptedEffect.setParameter("InputVisibility", "True")
-        if self.outputVolumeSelector.currentNode() is self.inputVolumeSelector.currentNode():
+        if self.outputVolumeSelector.currentNode() is self.getInputVolume():
           self.scriptedEffect.setParameter("OutputVisibility", "True")
         elif self.scriptedEffect.parameter("OutputVisibility") == "True":
           self.scriptedEffect.setParameter("OutputVisibility", "False")
@@ -190,7 +198,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
         self.scriptedEffect.setParameter("InputVisibility", "False")
         if self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
           self.scriptedEffect.setParameter("OutputVisibility", "True")
-        elif self.outputVolumeSelector.currentNode() is self.inputVolumeSelector.currentNode():
+        elif self.outputVolumeSelector.currentNode() is self.getInputVolume():
           self.scriptedEffect.setParameter("OutputVisibility", "False")
     self.updateGUIFromMRML()
 
@@ -198,35 +206,35 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.outputVisibilityButton.isEnabled() and self.outputVolumeSelector.currentNode():
       if self.outputVisibilityButton.isChecked():
         self.scriptedEffect.setParameter("OutputVisibility", "True")
-        if self.inputVolumeSelector.currentNode() is self.outputVolumeSelector.currentNode():
+        if self.getInputVolume() is self.outputVolumeSelector.currentNode():
           self.scriptedEffect.setParameter("InputVisibility", "True")
         elif self.scriptedEffect.parameter("InputVisibility") == "True":
           self.scriptedEffect.setParameter("InputVisibility", "False")
       else:
         self.scriptedEffect.setParameter("OutputVisibility", "False")
-        if self.inputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
+        if self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
           self.scriptedEffect.setParameter("InputVisibility", "True")
-        elif self.inputVolumeSelector.currentNode() is self.outputVolumeSelector.currentNode():
+        elif self.getInputVolume() is self.outputVolumeSelector.currentNode():
           self.scriptedEffect.setParameter("InputVisibility", "False")
     self.updateGUIFromMRML()
 
   def onInputVolumeChanged(self):
-    if self.inputVolumeSelector.currentNode() is self.outputVolumeSelector.currentNode():
+    if self.getInputVolume() is self.outputVolumeSelector.currentNode():
       if self.scriptedEffect.parameter("OutputVisibility") == "True":
         self.scriptedEffect.setParameter("InputVisibility", "True")
-      elif self.inputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
+      elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
         self.scriptedEffect.setParameter("OutputVisibility", "True")
         self.scriptedEffect.setParameter("InputVisibility", "True")
       else:
         self.scriptedEffect.setParameter("InputVisibility", "False")
-    elif self.inputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("OutputVisibility") == "False":
+    elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("OutputVisibility") == "False":
       self.scriptedEffect.setParameter("InputVisibility", "True")
     else:
       self.scriptedEffect.setParameter("InputVisibility", "False")
     self.updateGUIFromMRML()
 
   def onOutputVolumeChanged(self):
-    if self.outputVolumeSelector.currentNode() is self.inputVolumeSelector.currentNode():
+    if self.outputVolumeSelector.currentNode() is self.getInputVolume():
       if self.scriptedEffect.parameter("InputVisibility") == "True":
         self.scriptedEffect.setParameter("OutputVisibility", "True")
       elif self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
@@ -244,12 +252,16 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.updateMRMLFromGUI()
 
   def onApply(self):
-    inputVolume = self.inputVolumeSelector.currentNode()
+    inputVolume = self.getInputVolume()
     outputVolume = self.outputVolumeSelector.currentNode()
     if not outputVolume:
-      outputVolume = slicer.vtkMRMLScalarVolumeNode()
-      slicer.mrmlScene.AddNode(outputVolume)
+      # Create new node for output
+      volumesLogic = slicer.modules.volumes.logic()
+      scene = inputVolume.GetScene()
+      outputVolumeName = inputVolume.GetName()+" masked"
+      outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       self.outputVolumeSelector.setCurrentNode(outputVolume)
+
     if self.scriptedEffect.parameter("Operation") == "FILL_INSIDE":
       maskOutsideSurface = False
     else:
@@ -263,6 +275,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     slicer.vtkSlicerSegmentationsModuleLogic.GetSegmentClosedSurfaceRepresentation(segmentationNode, segmentID, outputPolyData)
     maskingModel.SetAndObservePolyData(outputPolyData)
 
+    slicer.app.setOverrideCursor(qt.Qt.WaitCursor) 
     self.maskVolumeWithSegment(inputVolume, maskingModel, maskOutsideSurface, fillValue, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
@@ -322,17 +335,4 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     outputVolume.SetAndObserveImageData(outputImageData);
     outputVolume.SetIJKToRASMatrix(ijkToRas)
 
-    # Add a default display node to output volume node if it does not exist yet
-    if not outputVolume.GetDisplayNode:
-      displayNode = slicer.vtkMRMLScalarVolumeDisplayNode()
-      displayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGrey")
-      slicer.mrmlScene.AddNode(displayNode)
-      outputVolume.SetAndObserveDisplayNodeID(displayNode.GetID())
-
     return True
-
-  def showInSliceViewers(self, volumeNode):
-    # Displays volumeNode in the slice viewers as background volume
-    selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-    selectionNode.SetActiveVolumeID(volumeNode.GetID())
-    slicer.app.applicationLogic().PropagateBackgroundVolumeSelection()
