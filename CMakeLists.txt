@@ -23,10 +23,11 @@ include(${Slicer_USE_FILE})
 
 #-----------------------------------------------------------------------------
 # Extension modules
-add_subdirectory(SegmentEditorWatershed)
 add_subdirectory(SegmentEditorFastMarching)
 add_subdirectory(SegmentEditorFloodFilling)
+add_subdirectory(SegmentEditorMaskVolume)
 add_subdirectory(SegmentEditorSurfaceCut)
+add_subdirectory(SegmentEditorWatershed)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
