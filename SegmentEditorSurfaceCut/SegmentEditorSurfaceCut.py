@@ -13,7 +13,7 @@ class SegmentEditorSurfaceCut(ScriptedLoadableModule):
     self.parent.title = "SegmentEditorSurfaceCut"
     self.parent.categories = ["Segmentation"]
     self.parent.dependencies = ["Segmentations"]
-    self.parent.contributors = ["Kyle MacNeil", "Andras Lasso"]
+    self.parent.contributors = ["Kyle MacNeil (Med-i Lab, Queen's; SPL, BWH)", "Andras Lasso (PerkLab, Queen's)", "Andrey Fedorov (SPL, BWH)"]
     self.parent.hidden = True
     self.parent.helpText = "This hidden module registers the segment editor effect"
     self.parent.helpText += self.getDefaultModuleDocumentationLink()

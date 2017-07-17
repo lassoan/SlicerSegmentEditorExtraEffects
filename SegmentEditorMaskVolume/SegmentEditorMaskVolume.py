@@ -15,7 +15,7 @@ class SegmentEditorMaskVolume(ScriptedLoadableModule):
     self.parent.title = "SegmentEditorMaskVolume"
     self.parent.categories = ["Segmentation"]
     self.parent.dependencies = ["Segmentations"]
-    self.parent.contributors = ["Kyle MacNeil"]
+    self.parent.contributors = ["Kyle MacNeil (Med-i Lab, Queen's; SPL, BWH)", "Andras Lasso (PerkLab, Queen's)"]
     self.parent.hidden = True
     self.parent.helpText = "This hidden module registers the segment editor effect"
     self.parent.helpText += self.getDefaultModuleDocumentationLink()

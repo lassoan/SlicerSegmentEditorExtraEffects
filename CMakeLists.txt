@@ -6,7 +6,7 @@ project(SegmentEditorExtraEffects)
 # Extension meta-information
 set(EXTENSION_HOMEPAGE "https://github.com/lassoan/SlicerSegmentEditorExtraEffects")
 set(EXTENSION_CATEGORY "Segmentation")
-set(EXTENSION_CONTRIBUTORS "Andras Lasso (PerkLab, Queen's), Kyle MacNeil (Med-i Lab, Queen's; SPL, BWH)")
+set(EXTENSION_CONTRIBUTORS "Andras Lasso (PerkLab, Queen's), Kyle MacNeil (Med-i Lab, Queen's; SPL, BWH), Andrey Fedorov (SPL, BWH)")
 set(EXTENSION_DESCRIPTION "Experimental effects for Segment Editor")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/lassoan/SlicerSegmentEditorExtraEffects/master/SegmentEditorExtraEffects.png")
 set(EXTENSION_SCREENSHOTURLS "\
