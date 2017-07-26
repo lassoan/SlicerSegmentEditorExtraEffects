@@ -44,19 +44,58 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.operationRadioButtons.append(self.fillOutsideButton)
     self.buttonToOperationNameMap[self.fillOutsideButton] = 'FILL_OUTSIDE'
 
+    self.binaryMaskFillButton = qt.QRadioButton("Binary mask")
+    self.operationRadioButtons.append(self.binaryMaskFillButton)
+    self.buttonToOperationNameMap[self.binaryMaskFillButton] = 'FILL_BOTH'
+
     # Operation buttons layout
     operationLayout = qt.QGridLayout()
     operationLayout.addWidget(self.fillInsideButton, 0, 0)
-    operationLayout.addWidget(self.fillOutsideButton, 0, 1)
+    operationLayout.addWidget(self.fillOutsideButton, 1, 0)
+    operationLayout.addWidget(self.binaryMaskFillButton, 0, 1)
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
-    # outside fill value
+    # fill value
     self.fillValueEdit = qt.QSpinBox()
     self.fillValueEdit.setToolTip("Choose the voxel intensity that will be used to fill the masked region.")
     self.fillValueEdit.minimum = -32768
     self.fillValueEdit.maximum = 65535
     self.fillValueEdit.connect("valueChanged(int)", self.fillValueChanged)
-    self.scriptedEffect.addLabeledOptionsWidget("Fill value: ", self.fillValueEdit)
+    self.fillValueLabel = qt.QLabel("Fill value: ")
+
+    # Binary mask fill outside value
+    self.binaryMaskFillOutsideEdit = qt.QSpinBox()
+    self.binaryMaskFillOutsideEdit.setToolTip("Choose the voxel intensity that will be used to fill outside the mask.")
+    self.binaryMaskFillOutsideEdit.minimum = -32768
+    self.binaryMaskFillOutsideEdit.maximum = 65535
+    self.binaryMaskFillOutsideEdit.connect("valueChanged(int)", self.fillValueChanged)
+    self.fillOutsideLabel = qt.QLabel("Outside fill value: ")
+
+    # Binary mask fill outside value
+    self.binaryMaskFillInsideEdit = qt.QSpinBox()
+    self.binaryMaskFillInsideEdit.setToolTip("Choose the voxel intensity that will be used to fill inside the mask.")
+    self.binaryMaskFillInsideEdit.minimum = -32768
+    self.binaryMaskFillInsideEdit.maximum = 65535
+    self.binaryMaskFillInsideEdit.connect("valueChanged(int)", self.fillValueChanged)
+    self.fillInsideLabel = qt.QLabel(" Inside fill value: ")
+
+    # Fill value layouts
+    fillValueLayout = qt.QFormLayout()
+    fillValueLayout.addRow(self.fillValueLabel, self.fillValueEdit)
+
+    fillOutsideLayout = qt.QFormLayout()
+    fillOutsideLayout.addRow(self.fillOutsideLabel, self.binaryMaskFillOutsideEdit)
+
+    fillInsideLayout = qt.QFormLayout()
+    fillInsideLayout.addRow(self.fillInsideLabel, self.binaryMaskFillInsideEdit)
+
+    binaryMaskFillLayout = qt.QHBoxLayout()
+    binaryMaskFillLayout.addLayout(fillOutsideLayout)
+    binaryMaskFillLayout.addLayout(fillInsideLayout)
+    fillValuesSpinBoxLayout = qt.QFormLayout()
+    fillValuesSpinBoxLayout.addRow(binaryMaskFillLayout)
+    fillValuesSpinBoxLayout.addRow(fillValueLayout)
+    self.scriptedEffect.addOptionsWidget(fillValuesSpinBoxLayout)
 
     # input volume selector
     self.inputVolumeSelector = slicer.qMRMLNodeComboBox()
@@ -70,16 +109,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
     self.inputVolumeSelector.setToolTip("Volume to mask. Default is current master volume node.")
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
-    #self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", self.inputVolumeSelector)
 
     self.inputVisibilityButton = qt.QToolButton()
     self.inputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
     self.inputVisibilityButton.setAutoRaise(True)
     self.inputVisibilityButton.setCheckable(True)
     self.inputVisibilityButton.connect('clicked()', self.onInputVisibilityButtonClicked)
-    inputLayout = qt.QGridLayout()
-    inputLayout.addWidget(self.inputVisibilityButton, 0, 0)
-    inputLayout.addWidget(self.inputVolumeSelector, 0, 1)
+    inputLayout = qt.QHBoxLayout()
+    inputLayout.addWidget(self.inputVisibilityButton)
+    inputLayout.addWidget(self.inputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", inputLayout)
 
     # output volume selector
@@ -100,9 +138,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.outputVisibilityButton.setAutoRaise(True)
     self.outputVisibilityButton.setCheckable(True)
     self.outputVisibilityButton.connect('clicked()', self.onOutputVisibilityButtonClicked)
-    outputLayout = qt.QGridLayout()
-    outputLayout.addWidget(self.outputVisibilityButton, 0, 0)
-    outputLayout.addWidget(self.outputVolumeSelector, 0, 1)
+    outputLayout = qt.QHBoxLayout()
+    outputLayout.addWidget(self.outputVisibilityButton)
+    outputLayout.addWidget(self.outputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Output Volume: ", outputLayout)
 
     # Apply button
@@ -122,12 +160,16 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("FillValue", "0")
+    self.scriptedEffect.setParameterDefault("BinaryMaskFillValueInside", "1")
+    self.scriptedEffect.setParameterDefault("BinaryMaskFillValueOutside", "0")
     self.scriptedEffect.setParameterDefault("Operation", "FILL_OUTSIDE")
     self.scriptedEffect.setParameterDefault("InputVisibility", "True")
     self.scriptedEffect.setParameterDefault("OutputVisibility", "False")
 
   def updateGUIFromMRML(self):
     self.fillValueEdit.setValue(float(self.scriptedEffect.parameter("FillValue")))
+    self.binaryMaskFillOutsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueOutside")))
+    self.binaryMaskFillInsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueInside")))
     operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value == self.scriptedEffect.parameter("Operation")][0]
     operationButton.setChecked(True)
 
@@ -166,6 +208,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
+    self.scriptedEffect.setParameter("BinaryMaskFillValueInside", self.binaryMaskFillInsideEdit.value)
+    self.scriptedEffect.setParameter("BinaryMaskFillValueOutside", self.binaryMaskFillOutsideEdit.value)
 
   def activate(self):
     self.scriptedEffect.setParameter("InputVisibility", "True")
@@ -178,6 +222,12 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onOperationSelectionChanged(self, operationName, toggle):
     if not toggle:
       return
+    self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.binaryMaskFillInsideEdit.setVisible(operationName is "FILL_BOTH")
+    self.fillInsideLabel.setVisible(operationName is "FILL_BOTH")
+    self.binaryMaskFillOutsideEdit.setVisible(operationName is "FILL_BOTH")
+    self.fillOutsideLabel.setVisible(operationName is "FILL_BOTH")
     self.scriptedEffect.setParameter("Operation", operationName)
 
   def getInputVolume(self):
