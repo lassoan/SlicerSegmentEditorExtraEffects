@@ -11,6 +11,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
 
+    self.logic = SurfaceCutLogic(scriptedEffect)
+
     # Effect-specific members
     self.segmentMarkupNode = None
     self.segmentMarkupNodeObserver = None
@@ -240,92 +242,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onApply(self):
 
-    import vtkSegmentationCorePython as vtkSegmentationCore
-
     # Allow users revert to this state by clicking Undo
     self.scriptedEffect.saveStateForUndo()
 
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-
-    if self.segmentMarkupNode and (self.segmentModel.GetPolyData().GetNumberOfPolys() > 0):
-      self.observeSegmentation(False)
-      operationName = self.scriptedEffect.parameter("Operation")
-      modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
-      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      WorldToModifierLabelmapIjkTransform = vtk.vtkTransform()
-
-      WorldToModifierLabelmapIjkTransformer = vtk.vtkTransformPolyDataFilter()
-      WorldToModifierLabelmapIjkTransformer.SetTransform(WorldToModifierLabelmapIjkTransform)
-      WorldToModifierLabelmapIjkTransformer.SetInputConnection(self.segmentModel.GetPolyDataConnection())
-
-      segmentationToSegmentationIjkTransformMatrix = vtk.vtkMatrix4x4()
-      modifierLabelmap.GetImageToWorldMatrix(segmentationToSegmentationIjkTransformMatrix)
-      segmentationToSegmentationIjkTransformMatrix.Invert()
-      WorldToModifierLabelmapIjkTransform.Concatenate(segmentationToSegmentationIjkTransformMatrix)
-
-      worldToSegmentationTransformMatrix = vtk.vtkMatrix4x4()
-      slicer.vtkMRMLTransformNode.GetMatrixTransformBetweenNodes(None, segmentationNode.GetParentTransformNode(), worldToSegmentationTransformMatrix)
-      WorldToModifierLabelmapIjkTransform.Concatenate(worldToSegmentationTransformMatrix)
-      WorldToModifierLabelmapIjkTransformer.Update()
-
-      polyToStencil = vtk.vtkPolyDataToImageStencil()
-      polyToStencil.SetOutputSpacing(1.0, 1.0, 1.0)
-      polyToStencil.SetInputConnection(WorldToModifierLabelmapIjkTransformer.GetOutputPort())
-      boundsIjk = WorldToModifierLabelmapIjkTransformer.GetOutput().GetBounds()
-      modifierLabelmapExtent = self.scriptedEffect.modifierLabelmap().GetExtent()
-      polyToStencil.SetOutputWholeExtent(modifierLabelmapExtent[0], modifierLabelmapExtent[1], modifierLabelmapExtent[2], modifierLabelmapExtent[3], int(round(boundsIjk[4])), int(round(boundsIjk[5])))
-      polyToStencil.Update()
-
-      stencilData = polyToStencil.GetOutput()
-      stencilExtent = [0, -1, 0, -1, 0, -1]
-      stencilData.SetExtent(stencilExtent)
-
-      stencilToImage = vtk.vtkImageStencilToImage()
-      stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
-      if operationName in ("FILL_INSIDE", "ERASE_INSIDE", "SET"):
-        stencilToImage.SetInsideValue(1.0)
-        stencilToImage.SetOutsideValue(0.0)
-      else:
-        stencilToImage.SetInsideValue(0.0)
-        stencilToImage.SetOutsideValue(1.0)
-      stencilToImage.SetOutputScalarType(modifierLabelmap.GetScalarType())
-
-      stencilPositioner = vtk.vtkImageChangeInformation()
-      stencilPositioner.SetInputConnection(stencilToImage.GetOutputPort())
-      stencilPositioner.SetOutputSpacing(modifierLabelmap.GetSpacing())
-      stencilPositioner.SetOutputOrigin(modifierLabelmap.GetOrigin())
-
-      stencilPositioner.Update()
-      orientedStencilPositionerOuput = vtkSegmentationCore.vtkOrientedImageData()
-      orientedStencilPositionerOuput.ShallowCopy(stencilToImage.GetOutput())
-      imageToWorld = vtk.vtkMatrix4x4()
-      modifierLabelmap.GetImageToWorldMatrix(imageToWorld)
-      orientedStencilPositionerOuput.SetImageToWorldMatrix(imageToWorld)
-
-      vtkSegmentationCore.vtkOrientedImageDataResample.ModifyImage(modifierLabelmap, orientedStencilPositionerOuput, vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
-
-      modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd
-      if operationName == "ERASE_INSIDE" or operationName == "ERASE_OUTSIDE":
-        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove
-      elif operationName == "SET":
-        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet
-
-      self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, modMode)
-
-      import numpy
-      n = self.segmentMarkupNode.GetNumberOfFiducials()
-      # get fiducial positions
-      fPos = numpy.zeros((n, 3))
-      for i in xrange(n):
-        coord = [0.0, 0.0, 0.0]
-        self.segmentMarkupNode.GetNthFiducialPosition(i, coord)
-        fPos[i] = coord
-      segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-      segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      segment.SetTag("fP", fPos.tostring())
-      segment.SetTag("fN", n)
-
+    self.observeSegmentation(False)
+    self.logic.cutSurfaceWithModel(self.segmentMarkupNode, self.segmentModel)
     self.reset()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
@@ -407,7 +330,17 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    self.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel)
+    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel)
+
+
+  def interactionNodeModified(self, interactionNode):
+    # Override default behavior: keep the effect active if markup placement mode is activated
+    pass
+
+class SurfaceCutLogic:
+
+  def __init__(self, scriptedEffect):
+    self.scriptedEffect = scriptedEffect
 
   def updateModelFromMarkup(self, inputMarkup, outputModel):
     """
@@ -434,8 +367,89 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
     markupsToModel = slicer.modules.markupstomodel.logic()
-    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True) # create smooth surface from points
+    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True)  # create smooth surface from points
 
-  def interactionNodeModified(self, interactionNode):
-    # Override default behavior: keep the effect active if markup placement mode is activated
-    pass
+  def cutSurfaceWithModel(self, segmentMarkupNode, segmentModel):
+
+    import vtkSegmentationCorePython as vtkSegmentationCore
+
+    if segmentMarkupNode and (segmentModel.GetPolyData().GetNumberOfPolys() > 0):
+      operationName = self.scriptedEffect.parameter("Operation")
+      modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
+      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+      WorldToModifierLabelmapIjkTransform = vtk.vtkTransform()
+
+      WorldToModifierLabelmapIjkTransformer = vtk.vtkTransformPolyDataFilter()
+      WorldToModifierLabelmapIjkTransformer.SetTransform(WorldToModifierLabelmapIjkTransform)
+      WorldToModifierLabelmapIjkTransformer.SetInputConnection(segmentModel.GetPolyDataConnection())
+
+      segmentationToSegmentationIjkTransformMatrix = vtk.vtkMatrix4x4()
+      modifierLabelmap.GetImageToWorldMatrix(segmentationToSegmentationIjkTransformMatrix)
+      segmentationToSegmentationIjkTransformMatrix.Invert()
+      WorldToModifierLabelmapIjkTransform.Concatenate(segmentationToSegmentationIjkTransformMatrix)
+
+      worldToSegmentationTransformMatrix = vtk.vtkMatrix4x4()
+      slicer.vtkMRMLTransformNode.GetMatrixTransformBetweenNodes(None, segmentationNode.GetParentTransformNode(),
+                                                                 worldToSegmentationTransformMatrix)
+      WorldToModifierLabelmapIjkTransform.Concatenate(worldToSegmentationTransformMatrix)
+      WorldToModifierLabelmapIjkTransformer.Update()
+
+      polyToStencil = vtk.vtkPolyDataToImageStencil()
+      polyToStencil.SetOutputSpacing(1.0, 1.0, 1.0)
+      polyToStencil.SetInputConnection(WorldToModifierLabelmapIjkTransformer.GetOutputPort())
+      boundsIjk = WorldToModifierLabelmapIjkTransformer.GetOutput().GetBounds()
+      modifierLabelmapExtent = self.scriptedEffect.modifierLabelmap().GetExtent()
+      polyToStencil.SetOutputWholeExtent(modifierLabelmapExtent[0], modifierLabelmapExtent[1],
+                                         modifierLabelmapExtent[2], modifierLabelmapExtent[3], int(round(boundsIjk[4])),
+                                         int(round(boundsIjk[5])))
+      polyToStencil.Update()
+
+      stencilData = polyToStencil.GetOutput()
+      stencilExtent = [0, -1, 0, -1, 0, -1]
+      stencilData.SetExtent(stencilExtent)
+
+      stencilToImage = vtk.vtkImageStencilToImage()
+      stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
+      if operationName in ("FILL_INSIDE", "ERASE_INSIDE", "SET"):
+        stencilToImage.SetInsideValue(1.0)
+        stencilToImage.SetOutsideValue(0.0)
+      else:
+        stencilToImage.SetInsideValue(0.0)
+        stencilToImage.SetOutsideValue(1.0)
+      stencilToImage.SetOutputScalarType(modifierLabelmap.GetScalarType())
+
+      stencilPositioner = vtk.vtkImageChangeInformation()
+      stencilPositioner.SetInputConnection(stencilToImage.GetOutputPort())
+      stencilPositioner.SetOutputSpacing(modifierLabelmap.GetSpacing())
+      stencilPositioner.SetOutputOrigin(modifierLabelmap.GetOrigin())
+
+      stencilPositioner.Update()
+      orientedStencilPositionerOuput = vtkSegmentationCore.vtkOrientedImageData()
+      orientedStencilPositionerOuput.ShallowCopy(stencilToImage.GetOutput())
+      imageToWorld = vtk.vtkMatrix4x4()
+      modifierLabelmap.GetImageToWorldMatrix(imageToWorld)
+      orientedStencilPositionerOuput.SetImageToWorldMatrix(imageToWorld)
+
+      vtkSegmentationCore.vtkOrientedImageDataResample.ModifyImage(modifierLabelmap, orientedStencilPositionerOuput,
+                                                                   vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
+
+      modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd
+      if operationName == "ERASE_INSIDE" or operationName == "ERASE_OUTSIDE":
+        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove
+      elif operationName == "SET":
+        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet
+
+      self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, modMode)
+
+      import numpy
+      n = segmentMarkupNode.GetNumberOfFiducials()
+      # get fiducial positions
+      fPos = numpy.zeros((n, 3))
+      for i in xrange(n):
+        coord = [0.0, 0.0, 0.0]
+        segmentMarkupNode.GetNthFiducialPosition(i, coord)
+        fPos[i] = coord
+      segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+      segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
+      segment.SetTag("fP", fPos.tostring())
+      segment.SetTag("fN", n)
