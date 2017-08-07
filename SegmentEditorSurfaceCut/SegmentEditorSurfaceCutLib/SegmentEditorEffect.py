@@ -155,7 +155,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       self.editButton.setVisible(segment.HasTag("fP"))
 
-    operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value == self.scriptedEffect.parameter("Operation")][0]
+    operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value ==
+                       self.scriptedEffect.parameter("Operation")][0]
     operationButton.setChecked(True)
 
   #
@@ -268,7 +269,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Add new observer
     if observationEnabled and segmentation is not None:
       self.observedSegmentation = segmentation
-      self.segmentObserver = self.observedSegmentation.AddObserver(vtkSegmentationCore.vtkSegmentation.SegmentModified, self.onSegmentModified)
+      self.segmentObserver = self.observedSegmentation.AddObserver(vtkSegmentationCore.vtkSegmentation.SegmentModified,
+                                                                   self.onSegmentModified)
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -295,7 +297,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Set and observe new parameter node
     self.segmentMarkupNode = segmentMarkupNode
     if self.segmentMarkupNode:
-      self.segmentMarkupNodeObserver = self.segmentMarkupNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onSegmentMarkupNodeModified)
+      self.segmentMarkupNodeObserver = self.segmentMarkupNode.AddObserver(vtk.vtkCommand.ModifiedEvent,
+                                                                          self.onSegmentMarkupNodeModified)
     # Update GUI
     self.updateModelFromSegmentMarkupNode()
 
@@ -314,7 +317,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       # Set and observe new parameter node
     self.segmentEditorNode = segmentEditorNode
     if self.segmentEditorNode:
-      self.segmentEditorNodeObserver = self.segmentEditorNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onSegmentEditorNodeModified)
+      self.segmentEditorNodeObserver = self.segmentEditorNode.AddObserver(vtk.vtkCommand.ModifiedEvent,
+                                                                          self.onSegmentEditorNodeModified)
 
   def onSegmentEditorNodeModified(self, observer, eventid):
     # Get color of edited segment
@@ -337,7 +341,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
 
-class SurfaceCutLogic:
+class SurfaceCutLogic(object):
 
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
