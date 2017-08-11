@@ -422,16 +422,3 @@ Binary mask operation creates a binary labelmap volume as output, with the insid
     outputVolume.SetIJKToRASMatrix(ijkToRas)
 
     return True
-
-  def setScalarType(self, imageData, type):
-    print(type)
-    if imageData == 0:
-      return
-    tp = vtk.vtkTrivialProducer()
-    tp.SetOutput(imageData)
-    outInfo = tp.GetOutputInformation(0)
-    vtkinfo = imageData.GetInformation()
-    imageData.SetPointDataActiveScalarInfo(vtkinfo, vtk.VTK_UNSIGNED_CHAR, imageData.GetNumberOfScalarComponents())
-    #vtk.vtkDataObject.SetPointDataActiveScalarInfo(outInfo,type, vtk.vtkImageData.GetNumberOfScalarComponents(outInfo))
-    print(imageData.GetScalarTypeAsString())
-    print(vtk.vtkImageData.GetNumberOfScalarComponents(outInfo))
