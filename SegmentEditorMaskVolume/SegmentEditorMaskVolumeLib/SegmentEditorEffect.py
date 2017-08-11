@@ -29,7 +29,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
 
   def helpText(self):
-    return """<html>Use currently selected segment as a mask.<br> The mask is applied to the master volume.
+    return """<html>Use the currently selected segment as a mask.<br> The mask is applied to the master volume by default.<p>
+Binary mask operation creates a binary labelmap volume as output, with the inside and outside fill values modifiable.
 </html>"""
 
   def setupOptionsFrame(self):
@@ -224,11 +225,17 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
     self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
     self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
-    self.binaryMaskFillInsideEdit.setVisible(operationName is "FILL_BOTH")
-    self.fillInsideLabel.setVisible(operationName is "FILL_BOTH")
-    self.binaryMaskFillOutsideEdit.setVisible(operationName is "FILL_BOTH")
-    self.fillOutsideLabel.setVisible(operationName is "FILL_BOTH")
+    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_BOTH")
+    self.fillInsideLabel.setVisible(operationName == "FILL_BOTH")
+    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_BOTH")
+    self.fillOutsideLabel.setVisible(operationName == "FILL_BOTH")
     self.scriptedEffect.setParameter("Operation", operationName)
+    self.outputVolumeSelector.setEnabled(operationName != "FILL_BOTH")
+    if operationName == "FILL_BOTH":
+      self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
+      self.outputVolumeSelector.setCurrentNodeIndex(-1)
+    else:
+      self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
 
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
@@ -304,19 +311,29 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onApply(self):
     inputVolume = self.getInputVolume()
     outputVolume = self.outputVolumeSelector.currentNode()
+    operationMode = self.scriptedEffect.parameter("Operation")
     if not outputVolume:
       # Create new node for output
       volumesLogic = slicer.modules.volumes.logic()
       scene = inputVolume.GetScene()
-      outputVolumeName = inputVolume.GetName()+" masked"
-      outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
+      if operationMode == "FILL_BOTH":
+        outputVolumeName = inputVolume.GetName()+" label"
+        outputVolume = volumesLogic.CreateAndAddLabelVolume(inputVolume, outputVolumeName)
+      else:
+        outputVolumeName = inputVolume.GetName()+" masked"
+        outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       self.outputVolumeSelector.setCurrentNode(outputVolume)
 
-    if self.scriptedEffect.parameter("Operation") == "FILL_INSIDE":
-      maskOutsideSurface = False
+    if operationMode == "FILL_OUTSIDE":
+      maskMode = 0
+    elif operationMode == "FILL_INSIDE":
+      maskMode = 1
     else:
-      maskOutsideSurface = True
-    fillValue = self.fillValueEdit.value
+      maskMode = 2
+    if operationMode in ["FILL_INSIDE", "FILL_OUTSIDE"]:
+      fillValues = [self.fillValueEdit.value]
+    else:
+      fillValues = [self.binaryMaskFillInsideEdit.value, self.binaryMaskFillOutsideEdit.value]
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -326,11 +343,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     maskingModel.SetAndObservePolyData(outputPolyData)
 
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor) 
-    self.maskVolumeWithSegment(inputVolume, maskingModel, maskOutsideSurface, fillValue, outputVolume)
+    self.maskVolumeWithSegment(inputVolume, maskingModel, maskMode, fillValues, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
 
-  def maskVolumeWithSegment(self, inputVolume, maskingModel, maskOutsideSurface, fillValue, outputVolume):
+  def maskVolumeWithSegment(self, inputVolume, maskingModel, maskMode, fillValues, outputVolume):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
     """
@@ -367,22 +384,54 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     polyToStencil.SetOutputOrigin(inputVolume.GetImageData().GetOrigin())
     polyToStencil.SetOutputWholeExtent(inputVolume.GetImageData().GetExtent())
 
-    # Apply the stencil to the volume
-    stencilToImage = vtk.vtkImageStencil()
-    stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
-    stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
-    if maskOutsideSurface:
-      stencilToImage.ReverseStencilOff()
+    if maskMode == 0 or maskMode == 1:
+      # Apply the stencil to the volume
+      stencilToImage = vtk.vtkImageStencil()
+      stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
+      stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
+      stencilToImage.SetBackgroundValue(fillValues[0])
+      stencilToImage.SetReverseStencil(maskMode)
+      stencilToImage.Update()
     else:
-      stencilToImage.ReverseStencilOn()
-    stencilToImage.SetBackgroundValue(fillValue)
-    stencilToImage.Update()
+      if fillValues[0] >= 0 and fillValues[1] >= 0:
+        # unsigned
+        if fillValues[0] > vtk.VTK_UNSIGNED_CHAR_MAX or fillValues[1] > vtk.VTK_UNSIGNED_CHAR_MAX:
+          scalarType = vtk.VTK_UNSIGNED_SHORT
+        else:
+          scalarType = vtk.VTK_UNSIGNED_CHAR
+      else:
+        # signed
+        if fillValues[0] > vtk.VTK_CHAR_MAX or fillValues[0] < vtk.VTK_CHAR_MIN or fillValues[1] > vtk.VTK_CHAR_MAX or \
+          fillValues[1] < vtk.VTK_CHAR_MIN:
+          scalarType = vtk.VTK_SHORT
+        else:
+          scalarType = vtk.VTK_CHAR
+
+      stencilToImage = vtk.vtkImageStencilToImage()
+      stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
+      stencilToImage.SetInsideValue(fillValues[0])
+      stencilToImage.SetOutsideValue(fillValues[1])
+      stencilToImage.SetOutputScalarType(scalarType)
+      stencilToImage.Update()
 
     # Update the volume with the stencil operation result
     outputImageData = vtk.vtkImageData()
     outputImageData.DeepCopy(stencilToImage.GetOutput())
 
-    outputVolume.SetAndObserveImageData(outputImageData);
+    outputVolume.SetAndObserveImageData(outputImageData)
     outputVolume.SetIJKToRASMatrix(ijkToRas)
 
     return True
+
+  def setScalarType(self, imageData, type):
+    print(type)
+    if imageData == 0:
+      return
+    tp = vtk.vtkTrivialProducer()
+    tp.SetOutput(imageData)
+    outInfo = tp.GetOutputInformation(0)
+    vtkinfo = imageData.GetInformation()
+    imageData.SetPointDataActiveScalarInfo(vtkinfo, vtk.VTK_UNSIGNED_CHAR, imageData.GetNumberOfScalarComponents())
+    #vtk.vtkDataObject.SetPointDataActiveScalarInfo(outInfo,type, vtk.vtkImageData.GetNumberOfScalarComponents(outInfo))
+    print(imageData.GetScalarTypeAsString())
+    print(vtk.vtkImageData.GetNumberOfScalarComponents(outInfo))
