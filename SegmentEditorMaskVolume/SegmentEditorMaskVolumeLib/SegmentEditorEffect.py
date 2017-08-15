@@ -30,7 +30,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def helpText(self):
     return """<html>Use the currently selected segment as a mask.<br> The mask is applied to the master volume by default.<p>
-Binary mask operation creates a binary labelmap volume as output, with the inside and outside fill values modifiable.
+Fill inside and outside operation creates a binary labelmap volume as output, with the inside and outside fill values 
+modifiable.
 </html>"""
 
   def setupOptionsFrame(self):
@@ -45,9 +46,10 @@ Binary mask operation creates a binary labelmap volume as output, with the insid
     self.operationRadioButtons.append(self.fillOutsideButton)
     self.buttonToOperationNameMap[self.fillOutsideButton] = 'FILL_OUTSIDE'
 
-    self.binaryMaskFillButton = qt.QRadioButton("Binary mask")
+    self.binaryMaskFillButton = qt.QRadioButton("Fill inside and outside")
+    self.binaryMaskFillButton.setToolTip("Create a labelmap volume with specified inside and outside fill values.")
     self.operationRadioButtons.append(self.binaryMaskFillButton)
-    self.buttonToOperationNameMap[self.binaryMaskFillButton] = 'FILL_BOTH'
+    self.buttonToOperationNameMap[self.binaryMaskFillButton] = 'FILL_INSIDE_AND_OUTSIDE'
 
     # Operation buttons layout
     operationLayout = qt.QGridLayout()
@@ -225,13 +227,13 @@ Binary mask operation creates a binary labelmap volume as output, with the insid
       return
     self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
     self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
-    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_BOTH")
-    self.fillInsideLabel.setVisible(operationName == "FILL_BOTH")
-    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_BOTH")
-    self.fillOutsideLabel.setVisible(operationName == "FILL_BOTH")
+    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillInsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillOutsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
     self.scriptedEffect.setParameter("Operation", operationName)
-    self.outputVolumeSelector.setEnabled(operationName != "FILL_BOTH")
-    if operationName == "FILL_BOTH":
+    self.outputVolumeSelector.setEnabled(operationName != "FILL_INSIDE_AND_OUTSIDE")
+    if operationName == "FILL_INSIDE_AND_OUTSIDE":
       self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
       self.outputVolumeSelector.setCurrentNodeIndex(-1)
     else:
@@ -316,7 +318,7 @@ Binary mask operation creates a binary labelmap volume as output, with the insid
       # Create new node for output
       volumesLogic = slicer.modules.volumes.logic()
       scene = inputVolume.GetScene()
-      if operationMode == "FILL_BOTH":
+      if operationMode == "FILL_INSIDE_AND_OUTSIDE":
         outputVolumeName = inputVolume.GetName()+" label"
         outputVolume = volumesLogic.CreateAndAddLabelVolume(inputVolume, outputVolumeName)
       else:
@@ -389,8 +391,8 @@ Binary mask operation creates a binary labelmap volume as output, with the insid
       stencilToImage = vtk.vtkImageStencil()
       stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
       stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
-      stencilToImage.SetBackgroundValue(fillValues[0])
       stencilToImage.SetReverseStencil(maskMode)
+      stencilToImage.SetBackgroundValue(fillValues[0])
       stencilToImage.Update()
     else:
       if fillValues[0] >= 0 and fillValues[1] >= 0:
