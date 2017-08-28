@@ -62,7 +62,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     fiducialAction.addWidget(self.fiducialPlacementToggle)
     fiducialAction.addWidget(self.editButton)
     self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialAction)
-    
+
     #Operation buttons
     self.eraseInsideButton = qt.QRadioButton("Erase inside")
     self.operationRadioButtons.append(self.eraseInsideButton)
@@ -153,7 +153,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      self.editButton.setVisible(segment.HasTag("fP"))
+      self.editButton.setVisible(segment.HasTag("SurfaceCutEffectMarkupPositions"))
 
     operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value ==
                        self.scriptedEffect.parameter("Operation")][0]
@@ -214,15 +214,18 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-    fPosStr = vtk.mutable("")
-    fPosNum = vtk.mutable("0")
-    segment.GetTag("fP", fPosStr)
-    segment.GetTag("fN", fPosNum)
 
+    fPosStr = vtk.mutable("")
+    segment.GetTag("SurfaceCutEffectMarkupPositions", fPosStr)
+    # convert from space-separated list o fnumbers to 1D array
     import numpy
-    fPos = numpy.fromstring(str(fPosStr), dtype='float64').reshape((int(fPosNum), 3))
-    for i in xrange(int(fPosNum)):
+    fPos = numpy.fromstring(str(fPosStr), sep=' ')
+    # convert from 1D array (N*3) to 2D array (N,3)
+    fPosNum = int(len(fPos)/3)
+    fPos = fPos.reshape((fPosNum, 3))
+    for i in xrange(fPosNum):
       self.segmentMarkupNode.AddFiducialFromArray(fPos[i])
+
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
 
@@ -445,15 +448,16 @@ class SurfaceCutLogic(object):
 
       self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, modMode)
 
+      # get fiducial positions as space-separated list
       import numpy
       n = segmentMarkupNode.GetNumberOfFiducials()
-      # get fiducial positions
-      fPos = numpy.zeros((n, 3))
+      fPos = []
       for i in xrange(n):
         coord = [0.0, 0.0, 0.0]
         segmentMarkupNode.GetNthFiducialPosition(i, coord)
-        fPos[i] = coord
+        fPos.extend(coord)
+      fPosString = ' '.join(map(str, fPos))
+
       segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      segment.SetTag("fP", fPos.tostring())
-      segment.SetTag("fN", n)
+      segment.SetTag("SurfaceCutEffectMarkupPositions", fPosString)
