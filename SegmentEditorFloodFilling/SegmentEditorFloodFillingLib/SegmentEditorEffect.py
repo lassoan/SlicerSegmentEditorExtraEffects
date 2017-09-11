@@ -30,6 +30,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 Click in the image to add voxels that have similar intensity to the clicked voxel.
 """
 
+  def activate(self):
+    # Update intensity range
+    self.masterVolumeNodeChanged()
+
   def setupOptionsFrame(self):
 
     self.intensityToleranceSlider = ctk.ctkSliderWidget()
@@ -59,6 +63,41 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     #return slicer.util.mainWindow().cursor
     return qt.QCursor(qt.Qt.PointingHandCursor)
     
+  def masterVolumeNodeChanged(self):
+    # Set scalar range of master volume image data to threshold slider
+    import vtkSegmentationCorePython as vtkSegmentationCore
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if not masterImageData:
+      return
+
+    # TODO: it might be useful to add a convenience function, which determines size and intensity min/max/step/decimals
+    # based on the selected master volume's size, spacing, and intensity range
+    
+    # Intensity slider
+    lo, hi = masterImageData.GetScalarRange()
+    if (hi-lo > 0):
+      import math
+      range = hi-lo
+      stepSize = 1
+      
+      # For floating-point volume: step size is 1/1000th of range (but maximum 1)
+      if masterImageData.GetScalarType() == vtk.VTK_FLOAT or masterImageData.GetScalarType() == vtk.VTK_DOUBLE:
+        stepSize = 10**(math.floor(math.log(range/1000.0)/math.log(10)))
+        if stepSize > 1:
+          stepSize = 1
+
+      self.intensityToleranceSlider.decimals = math.log(stepSize)/math.log(10)
+      self.intensityToleranceSlider.minimum = stepSize
+      self.intensityToleranceSlider.maximum = range
+      self.intensityToleranceSlider.singleStep = stepSize
+      self.intensityToleranceSlider.pageStep = stepSize*10
+
+    # Size slider
+    minSpacing = min(masterImageData.GetSpacing())
+    self.neighborhoodSizeMmSlider.minimum = 10**(math.floor(math.log(minSpacing/10.0)/math.log(10)))
+    self.neighborhoodSizeMmSlider.maximum = 10**(math.ceil(math.log(minSpacing*100.0)/math.log(10)))
+    self.neighborhoodSizeMmSlider.singleStep = self.neighborhoodSizeMmSlider.minimum
+    self.neighborhoodSizeMmSlider.pageStep = self.neighborhoodSizeMmSlider.singleStep*10
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("IntensityTolerance", 10.0)

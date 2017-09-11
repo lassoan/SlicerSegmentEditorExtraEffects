@@ -29,7 +29,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
 
   def helpText(self):
-    return """<html>Use currently selected segment as a mask.<br> The mask is applied to the master volume.
+    return """<html>Use the currently selected segment as a mask.<br> The mask is applied to the master volume by default.<p>
+Fill inside and outside operation creates a binary labelmap volume as output, with the inside and outside fill values 
+modifiable.
 </html>"""
 
   def setupOptionsFrame(self):
@@ -44,19 +46,59 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.operationRadioButtons.append(self.fillOutsideButton)
     self.buttonToOperationNameMap[self.fillOutsideButton] = 'FILL_OUTSIDE'
 
+    self.binaryMaskFillButton = qt.QRadioButton("Fill inside and outside")
+    self.binaryMaskFillButton.setToolTip("Create a labelmap volume with specified inside and outside fill values.")
+    self.operationRadioButtons.append(self.binaryMaskFillButton)
+    self.buttonToOperationNameMap[self.binaryMaskFillButton] = 'FILL_INSIDE_AND_OUTSIDE'
+
     # Operation buttons layout
     operationLayout = qt.QGridLayout()
     operationLayout.addWidget(self.fillInsideButton, 0, 0)
-    operationLayout.addWidget(self.fillOutsideButton, 0, 1)
+    operationLayout.addWidget(self.fillOutsideButton, 1, 0)
+    operationLayout.addWidget(self.binaryMaskFillButton, 0, 1)
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
-    # outside fill value
+    # fill value
     self.fillValueEdit = qt.QSpinBox()
     self.fillValueEdit.setToolTip("Choose the voxel intensity that will be used to fill the masked region.")
     self.fillValueEdit.minimum = -32768
     self.fillValueEdit.maximum = 65535
     self.fillValueEdit.connect("valueChanged(int)", self.fillValueChanged)
-    self.scriptedEffect.addLabeledOptionsWidget("Fill value: ", self.fillValueEdit)
+    self.fillValueLabel = qt.QLabel("Fill value: ")
+
+    # Binary mask fill outside value
+    self.binaryMaskFillOutsideEdit = qt.QSpinBox()
+    self.binaryMaskFillOutsideEdit.setToolTip("Choose the voxel intensity that will be used to fill outside the mask.")
+    self.binaryMaskFillOutsideEdit.minimum = -32768
+    self.binaryMaskFillOutsideEdit.maximum = 65535
+    self.binaryMaskFillOutsideEdit.connect("valueChanged(int)", self.fillValueChanged)
+    self.fillOutsideLabel = qt.QLabel("Outside fill value: ")
+
+    # Binary mask fill outside value
+    self.binaryMaskFillInsideEdit = qt.QSpinBox()
+    self.binaryMaskFillInsideEdit.setToolTip("Choose the voxel intensity that will be used to fill inside the mask.")
+    self.binaryMaskFillInsideEdit.minimum = -32768
+    self.binaryMaskFillInsideEdit.maximum = 65535
+    self.binaryMaskFillInsideEdit.connect("valueChanged(int)", self.fillValueChanged)
+    self.fillInsideLabel = qt.QLabel(" Inside fill value: ")
+
+    # Fill value layouts
+    fillValueLayout = qt.QFormLayout()
+    fillValueLayout.addRow(self.fillValueLabel, self.fillValueEdit)
+
+    fillOutsideLayout = qt.QFormLayout()
+    fillOutsideLayout.addRow(self.fillOutsideLabel, self.binaryMaskFillOutsideEdit)
+
+    fillInsideLayout = qt.QFormLayout()
+    fillInsideLayout.addRow(self.fillInsideLabel, self.binaryMaskFillInsideEdit)
+
+    binaryMaskFillLayout = qt.QHBoxLayout()
+    binaryMaskFillLayout.addLayout(fillOutsideLayout)
+    binaryMaskFillLayout.addLayout(fillInsideLayout)
+    fillValuesSpinBoxLayout = qt.QFormLayout()
+    fillValuesSpinBoxLayout.addRow(binaryMaskFillLayout)
+    fillValuesSpinBoxLayout.addRow(fillValueLayout)
+    self.scriptedEffect.addOptionsWidget(fillValuesSpinBoxLayout)
 
     # input volume selector
     self.inputVolumeSelector = slicer.qMRMLNodeComboBox()
@@ -70,16 +112,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
     self.inputVolumeSelector.setToolTip("Volume to mask. Default is current master volume node.")
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
-    #self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", self.inputVolumeSelector)
 
     self.inputVisibilityButton = qt.QToolButton()
     self.inputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
     self.inputVisibilityButton.setAutoRaise(True)
     self.inputVisibilityButton.setCheckable(True)
     self.inputVisibilityButton.connect('clicked()', self.onInputVisibilityButtonClicked)
-    inputLayout = qt.QGridLayout()
-    inputLayout.addWidget(self.inputVisibilityButton, 0, 0)
-    inputLayout.addWidget(self.inputVolumeSelector, 0, 1)
+    inputLayout = qt.QHBoxLayout()
+    inputLayout.addWidget(self.inputVisibilityButton)
+    inputLayout.addWidget(self.inputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", inputLayout)
 
     # output volume selector
@@ -100,9 +141,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.outputVisibilityButton.setAutoRaise(True)
     self.outputVisibilityButton.setCheckable(True)
     self.outputVisibilityButton.connect('clicked()', self.onOutputVisibilityButtonClicked)
-    outputLayout = qt.QGridLayout()
-    outputLayout.addWidget(self.outputVisibilityButton, 0, 0)
-    outputLayout.addWidget(self.outputVolumeSelector, 0, 1)
+    outputLayout = qt.QHBoxLayout()
+    outputLayout.addWidget(self.outputVisibilityButton)
+    outputLayout.addWidget(self.outputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Output Volume: ", outputLayout)
 
     # Apply button
@@ -122,12 +163,16 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("FillValue", "0")
+    self.scriptedEffect.setParameterDefault("BinaryMaskFillValueInside", "1")
+    self.scriptedEffect.setParameterDefault("BinaryMaskFillValueOutside", "0")
     self.scriptedEffect.setParameterDefault("Operation", "FILL_OUTSIDE")
     self.scriptedEffect.setParameterDefault("InputVisibility", "True")
     self.scriptedEffect.setParameterDefault("OutputVisibility", "False")
 
   def updateGUIFromMRML(self):
     self.fillValueEdit.setValue(float(self.scriptedEffect.parameter("FillValue")))
+    self.binaryMaskFillOutsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueOutside")))
+    self.binaryMaskFillInsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueInside")))
     operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value == self.scriptedEffect.parameter("Operation")][0]
     operationButton.setChecked(True)
 
@@ -166,6 +211,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
+    self.scriptedEffect.setParameter("BinaryMaskFillValueInside", self.binaryMaskFillInsideEdit.value)
+    self.scriptedEffect.setParameter("BinaryMaskFillValueOutside", self.binaryMaskFillOutsideEdit.value)
 
   def activate(self):
     self.scriptedEffect.setParameter("InputVisibility", "True")
@@ -178,7 +225,19 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onOperationSelectionChanged(self, operationName, toggle):
     if not toggle:
       return
+    self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillInsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillOutsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
     self.scriptedEffect.setParameter("Operation", operationName)
+    self.outputVolumeSelector.setEnabled(operationName != "FILL_INSIDE_AND_OUTSIDE")
+    if operationName == "FILL_INSIDE_AND_OUTSIDE":
+      self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
+      self.outputVolumeSelector.setCurrentNodeIndex(-1)
+    else:
+      self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
 
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
@@ -254,19 +313,29 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onApply(self):
     inputVolume = self.getInputVolume()
     outputVolume = self.outputVolumeSelector.currentNode()
+    operationMode = self.scriptedEffect.parameter("Operation")
     if not outputVolume:
       # Create new node for output
       volumesLogic = slicer.modules.volumes.logic()
       scene = inputVolume.GetScene()
-      outputVolumeName = inputVolume.GetName()+" masked"
-      outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
+      if operationMode == "FILL_INSIDE_AND_OUTSIDE":
+        outputVolumeName = inputVolume.GetName()+" label"
+        outputVolume = volumesLogic.CreateAndAddLabelVolume(inputVolume, outputVolumeName)
+      else:
+        outputVolumeName = inputVolume.GetName()+" masked"
+        outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       self.outputVolumeSelector.setCurrentNode(outputVolume)
 
-    if self.scriptedEffect.parameter("Operation") == "FILL_INSIDE":
-      maskOutsideSurface = False
+    if operationMode == "FILL_OUTSIDE":
+      maskMode = 0
+    elif operationMode == "FILL_INSIDE":
+      maskMode = 1
     else:
-      maskOutsideSurface = True
-    fillValue = self.fillValueEdit.value
+      maskMode = 2
+    if operationMode in ["FILL_INSIDE", "FILL_OUTSIDE"]:
+      fillValues = [self.fillValueEdit.value]
+    else:
+      fillValues = [self.binaryMaskFillInsideEdit.value, self.binaryMaskFillOutsideEdit.value]
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -276,11 +345,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     maskingModel.SetAndObservePolyData(outputPolyData)
 
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor) 
-    self.maskVolumeWithSegment(inputVolume, maskingModel, maskOutsideSurface, fillValue, outputVolume)
+    self.maskVolumeWithSegment(inputVolume, maskingModel, maskMode, fillValues, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
 
-  def maskVolumeWithSegment(self, inputVolume, maskingModel, maskOutsideSurface, fillValue, outputVolume):
+  def maskVolumeWithSegment(self, inputVolume, maskingModel, maskMode, fillValues, outputVolume):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
     """
@@ -317,22 +386,41 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     polyToStencil.SetOutputOrigin(inputVolume.GetImageData().GetOrigin())
     polyToStencil.SetOutputWholeExtent(inputVolume.GetImageData().GetExtent())
 
-    # Apply the stencil to the volume
-    stencilToImage = vtk.vtkImageStencil()
-    stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
-    stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
-    if maskOutsideSurface:
-      stencilToImage.ReverseStencilOff()
+    if maskMode == 0 or maskMode == 1:
+      # Apply the stencil to the volume
+      stencilToImage = vtk.vtkImageStencil()
+      stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
+      stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
+      stencilToImage.SetReverseStencil(maskMode)
+      stencilToImage.SetBackgroundValue(fillValues[0])
+      stencilToImage.Update()
     else:
-      stencilToImage.ReverseStencilOn()
-    stencilToImage.SetBackgroundValue(fillValue)
-    stencilToImage.Update()
+      if fillValues[0] >= 0 and fillValues[1] >= 0:
+        # unsigned
+        if fillValues[0] > vtk.VTK_UNSIGNED_CHAR_MAX or fillValues[1] > vtk.VTK_UNSIGNED_CHAR_MAX:
+          scalarType = vtk.VTK_UNSIGNED_SHORT
+        else:
+          scalarType = vtk.VTK_UNSIGNED_CHAR
+      else:
+        # signed
+        if fillValues[0] > vtk.VTK_CHAR_MAX or fillValues[0] < vtk.VTK_CHAR_MIN or fillValues[1] > vtk.VTK_CHAR_MAX or \
+          fillValues[1] < vtk.VTK_CHAR_MIN:
+          scalarType = vtk.VTK_SHORT
+        else:
+          scalarType = vtk.VTK_CHAR
+
+      stencilToImage = vtk.vtkImageStencilToImage()
+      stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
+      stencilToImage.SetInsideValue(fillValues[0])
+      stencilToImage.SetOutsideValue(fillValues[1])
+      stencilToImage.SetOutputScalarType(scalarType)
+      stencilToImage.Update()
 
     # Update the volume with the stencil operation result
     outputImageData = vtk.vtkImageData()
     outputImageData.DeepCopy(stencilToImage.GetOutput())
 
-    outputVolume.SetAndObserveImageData(outputImageData);
+    outputVolume.SetAndObserveImageData(outputImageData)
     outputVolume.SetIJKToRASMatrix(ijkToRas)
 
     return True
