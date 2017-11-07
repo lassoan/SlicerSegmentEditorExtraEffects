@@ -278,12 +278,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
-      displayNode = slicer.vtkMRMLMarkupsDisplayNode()
+      displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
       displayNode.SetTextScale(0)
-      slicer.mrmlScene.AddNode(displayNode)
-      self.segmentMarkupNode = slicer.vtkMRMLMarkupsFiducialNode()
+      self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
       self.segmentMarkupNode.SetName('C')
-      slicer.mrmlScene.AddNode(self.segmentMarkupNode)
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
