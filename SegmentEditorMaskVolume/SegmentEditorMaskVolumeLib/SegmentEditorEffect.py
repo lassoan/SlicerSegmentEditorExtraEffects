@@ -30,7 +30,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def helpText(self):
     return """<html>Use the currently selected segment as a mask.<br> The mask is applied to the master volume by default.<p>
-Fill inside and outside operation creates a binary labelmap volume as output, with the inside and outside fill values 
+Fill inside and outside operation creates a binary labelmap volume as output, with the inside and outside fill values
 modifiable.
 </html>"""
 
@@ -102,7 +102,7 @@ modifiable.
 
     # input volume selector
     self.inputVolumeSelector = slicer.qMRMLNodeComboBox()
-    self.inputVolumeSelector.nodeTypes = (("vtkMRMLScalarVolumeNode"), "")
+    self.inputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
     self.inputVolumeSelector.selectNodeUponCreation = True
     self.inputVolumeSelector.addEnabled = True
     self.inputVolumeSelector.removeEnabled = True
@@ -125,10 +125,11 @@ modifiable.
 
     # output volume selector
     self.outputVolumeSelector = slicer.qMRMLNodeComboBox()
-    self.outputVolumeSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "")
+    self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
     self.outputVolumeSelector.selectNodeUponCreation = True
     self.outputVolumeSelector.addEnabled = True
     self.outputVolumeSelector.removeEnabled = True
+    self.outputVolumeSelector.renameEnabled = True
     self.outputVolumeSelector.noneEnabled = True
     self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
     self.outputVolumeSelector.showHidden = False
@@ -232,19 +233,23 @@ modifiable.
     self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
     self.fillOutsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
     self.scriptedEffect.setParameter("Operation", operationName)
-    self.outputVolumeSelector.setEnabled(operationName != "FILL_INSIDE_AND_OUTSIDE")
-    if operationName == "FILL_INSIDE_AND_OUTSIDE":
-      self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
-      self.outputVolumeSelector.setCurrentNodeIndex(-1)
+    if operationName in ["FILL_INSIDE", "FILL_OUTSIDE"]:
+      if self.outputVolumeSelector.noneDisplay != "(Create new Volume)":
+        self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
+        self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
+        self.outputVolumeSelector.setCurrentNode(None)
     else:
-      self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
+      if self.outputVolumeSelector.noneDisplay != "(Create new Labelmap Volume)":
+        self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
+        self.outputVolumeSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode", "vtkMRMLScalarVolumeNode"]
+        self.outputVolumeSelector.setCurrentNode(None)
 
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
     if inputVolume is None:
       inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     return inputVolume
-    
+
   def onInputVisibilityButtonClicked(self):
     if self.inputVisibilityButton.isEnabled():
       if self.inputVisibilityButton.isChecked():
@@ -326,12 +331,6 @@ modifiable.
         outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       self.outputVolumeSelector.setCurrentNode(outputVolume)
 
-    if operationMode == "FILL_OUTSIDE":
-      maskMode = 0
-    elif operationMode == "FILL_INSIDE":
-      maskMode = 1
-    else:
-      maskMode = 2
     if operationMode in ["FILL_INSIDE", "FILL_OUTSIDE"]:
       fillValues = [self.fillValueEdit.value]
     else:
@@ -339,88 +338,64 @@ modifiable.
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    maskingModel = slicer.vtkMRMLModelNode()
-    outputPolyData = vtk.vtkPolyData()
-    slicer.vtkSlicerSegmentationsModuleLogic.GetSegmentClosedSurfaceRepresentation(segmentationNode, segmentID, outputPolyData)
-    maskingModel.SetAndObservePolyData(outputPolyData)
 
-    slicer.app.setOverrideCursor(qt.Qt.WaitCursor) 
-    self.maskVolumeWithSegment(inputVolume, maskingModel, maskMode, fillValues, outputVolume)
+    slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
+    self.maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolume, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
 
-  def maskVolumeWithSegment(self, inputVolume, maskingModel, maskMode, fillValues, outputVolume):
+  def maskVolumeWithSegment(self, segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
     """
 
-    # Determine the transform between the box and the image IJK coordinate systems
+    segmentIDs = vtk.vtkStringArray()
+    segmentIDs.InsertNextValue(segmentID)
+    maskVolumeNode = slicer.modules.volumes.logic().CreateAndAddLabelVolume(inputVolumeNode, "TemporaryVolumeMask")
+    if not maskVolumeNode:
+      logging.error("maskVolumeWithSegment failed: invalid maskVolumeNode")
+      return False
 
-    rasToModel = vtk.vtkMatrix4x4()
-    if maskingModel.GetTransformNodeID() != None:
-      modelTransformNode = slicer.mrmlScene.GetNodeByID(maskingModel.GetTransformNodeID())
-      boxToRas = vtk.vtkMatrix4x4()
-      modelTransformNode.GetMatrixTransformToWorld(boxToRas)
-      rasToModel.DeepCopy(boxToRas)
-      rasToModel.Invert()
+    if not slicer.vtkSlicerSegmentationsModuleLogic.ExportSegmentsToLabelmapNode(segmentationNode, segmentIDs, maskVolumeNode, inputVolumeNode):
+      logging.error("maskVolumeWithSegment failed: ExportSegmentsToLabelmapNode error")
+      slicer.mrmlScene.RemoveNode(maskVolumeNode.GetDisplayNode().GetColorNode())
+      slicer.mrmlScene.RemoveNode(maskVolumeNode.GetDisplayNode())
+      slicer.mrmlScene.RemoveNode(maskVolumeNode)
+      return False
 
-    ijkToRas = vtk.vtkMatrix4x4()
-    inputVolume.GetIJKToRASMatrix(ijkToRas)
+    maskToStencil = vtk.vtkImageToImageStencil()
+    maskToStencil.ThresholdByLower(0)
+    maskToStencil.SetInputData(maskVolumeNode.GetImageData())
 
-    ijkToModel = vtk.vtkMatrix4x4()
-    vtk.vtkMatrix4x4.Multiply4x4(rasToModel, ijkToRas, ijkToModel)
-    modelToIjkTransform = vtk.vtkTransform()
-    modelToIjkTransform.SetMatrix(ijkToModel)
-    modelToIjkTransform.Inverse()
+    stencil = vtk.vtkImageStencil()
 
-    transformModelToIjk = vtk.vtkTransformPolyDataFilter()
-    transformModelToIjk.SetTransform(modelToIjkTransform)
-    transformModelToIjk.SetInputConnection(maskingModel.GetPolyDataConnection())
-
-    # Use the stencil to fill the volume
-
-    # Convert model to stencil
-    polyToStencil = vtk.vtkPolyDataToImageStencil()
-    polyToStencil.SetInputConnection(transformModelToIjk.GetOutputPort())
-    polyToStencil.SetOutputSpacing(inputVolume.GetImageData().GetSpacing())
-    polyToStencil.SetOutputOrigin(inputVolume.GetImageData().GetOrigin())
-    polyToStencil.SetOutputWholeExtent(inputVolume.GetImageData().GetExtent())
-
-    if maskMode == 0 or maskMode == 1:
-      # Apply the stencil to the volume
-      stencilToImage = vtk.vtkImageStencil()
-      stencilToImage.SetInputConnection(inputVolume.GetImageDataConnection())
-      stencilToImage.SetStencilConnection(polyToStencil.GetOutputPort())
-      stencilToImage.SetReverseStencil(maskMode)
-      stencilToImage.SetBackgroundValue(fillValues[0])
-      stencilToImage.Update()
+    if operationMode == "FILL_INSIDE_AND_OUTSIDE":
+      # Set input to constant value
+      thresh = vtk.vtkImageThreshold()
+      thresh.SetInputData(inputVolumeNode.GetImageData())
+      thresh.ThresholdByLower(0)
+      thresh.SetInValue(fillValues[1])
+      thresh.SetOutValue(fillValues[1])
+      thresh.SetOutputScalarType(inputVolumeNode.GetImageData().GetScalarType())
+      thresh.Update()
+      stencil.SetInputData(thresh.GetOutput())
     else:
-      if fillValues[0] >= 0 and fillValues[1] >= 0:
-        # unsigned
-        if fillValues[0] > vtk.VTK_UNSIGNED_CHAR_MAX or fillValues[1] > vtk.VTK_UNSIGNED_CHAR_MAX:
-          scalarType = vtk.VTK_UNSIGNED_SHORT
-        else:
-          scalarType = vtk.VTK_UNSIGNED_CHAR
-      else:
-        # signed
-        if fillValues[0] > vtk.VTK_CHAR_MAX or fillValues[0] < vtk.VTK_CHAR_MIN or fillValues[1] > vtk.VTK_CHAR_MAX or \
-          fillValues[1] < vtk.VTK_CHAR_MIN:
-          scalarType = vtk.VTK_SHORT
-        else:
-          scalarType = vtk.VTK_CHAR
+      stencil.SetInputData(inputVolumeNode.GetImageData())
 
-      stencilToImage = vtk.vtkImageStencilToImage()
-      stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
-      stencilToImage.SetInsideValue(fillValues[0])
-      stencilToImage.SetOutsideValue(fillValues[1])
-      stencilToImage.SetOutputScalarType(scalarType)
-      stencilToImage.Update()
+    stencil.SetStencilConnection(maskToStencil.GetOutputPort())
+    stencil.SetReverseStencil(operationMode == "FILL_OUTSIDE")
+    stencil.SetBackgroundValue(fillValues[0])
+    stencil.Update()
 
-    # Update the volume with the stencil operation result
-    outputImageData = vtk.vtkImageData()
-    outputImageData.DeepCopy(stencilToImage.GetOutput())
+    outputVolumeNode.SetAndObserveImageData(stencil.GetOutput())
 
-    outputVolume.SetAndObserveImageData(outputImageData)
-    outputVolume.SetIJKToRASMatrix(ijkToRas)
+    # Set the same geometry and parent transform as the input volume
+    ijkToRas = vtk.vtkMatrix4x4()
+    inputVolumeNode.GetIJKToRASMatrix(ijkToRas)
+    outputVolumeNode.SetIJKToRASMatrix(ijkToRas)
+    inputVolumeNode.SetAndObserveTransformNodeID(inputVolumeNode.GetTransformNodeID())
 
+    slicer.mrmlScene.RemoveNode(maskVolumeNode.GetDisplayNode().GetColorNode())
+    slicer.mrmlScene.RemoveNode(maskVolumeNode.GetDisplayNode())
+    slicer.mrmlScene.RemoveNode(maskVolumeNode)
     return True
