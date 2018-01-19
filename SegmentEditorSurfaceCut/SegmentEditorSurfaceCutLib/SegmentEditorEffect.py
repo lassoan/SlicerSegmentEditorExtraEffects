@@ -1,5 +1,5 @@
 import os
-import vtk, qt, ctk, slicer
+import vtk, qt, slicer
 import logging
 from SegmentEditorEffects import *
 
@@ -286,7 +286,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
 
-
   def setAndObserveSegmentMarkupNode(self, segmentMarkupNode):
     if segmentMarkupNode == self.segmentMarkupNode and self.segmentMarkupNodeObserver:
       # no change and node is already observed
@@ -337,7 +336,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
     self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel)
 
-
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
@@ -378,10 +376,25 @@ class SurfaceCutLogic(object):
 
     import vtkSegmentationCorePython as vtkSegmentationCore
 
-    if segmentMarkupNode and (segmentModel.GetPolyData().GetNumberOfPolys() > 0):
+    if not segmentMarkupNode:
+      raise AttributeError("{}: segment markup node not set.".format(self.__class__.__name__))
+    if not segmentModel:
+      raise AttributeError("{}: segment model not set.".format(self.__class__.__name__))
+
+    if segmentMarkupNode and segmentModel.GetPolyData().GetNumberOfPolys() > 0:
       operationName = self.scriptedEffect.parameter("Operation")
-      modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
+
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+      if not segmentationNode:
+        raise AttributeError("{}: Segmentation node not set.".format(self.__class__.__name__))
+
+      modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
+      if not modifierLabelmap:
+        raise AttributeError("{}: ModifierLabelmap not set. This can happen for various reasons:\n"
+                             "No master volume set for segmentation,\n"
+                             "No existing segments for segmentation, or\n"
+                             "No referenceImageGeometry is specified in the segmentation".format(self.__class__.__name__))
+
       WorldToModifierLabelmapIjkTransform = vtk.vtkTransform()
 
       WorldToModifierLabelmapIjkTransformer = vtk.vtkTransformPolyDataFilter()
@@ -405,8 +418,8 @@ class SurfaceCutLogic(object):
       boundsIjk = WorldToModifierLabelmapIjkTransformer.GetOutput().GetBounds()
       modifierLabelmapExtent = self.scriptedEffect.modifierLabelmap().GetExtent()
       polyToStencil.SetOutputWholeExtent(modifierLabelmapExtent[0], modifierLabelmapExtent[1],
-                                         modifierLabelmapExtent[2], modifierLabelmapExtent[3], int(round(boundsIjk[4])),
-                                         int(round(boundsIjk[5])))
+                                         modifierLabelmapExtent[2], modifierLabelmapExtent[3],
+                                         int(round(boundsIjk[4])), int(round(boundsIjk[5])))
       polyToStencil.Update()
 
       stencilData = polyToStencil.GetOutput()
@@ -429,14 +442,15 @@ class SurfaceCutLogic(object):
       stencilPositioner.SetOutputOrigin(modifierLabelmap.GetOrigin())
 
       stencilPositioner.Update()
-      orientedStencilPositionerOuput = vtkSegmentationCore.vtkOrientedImageData()
-      orientedStencilPositionerOuput.ShallowCopy(stencilToImage.GetOutput())
+      orientedStencilPositionerOutput = vtkSegmentationCore.vtkOrientedImageData()
+      orientedStencilPositionerOutput.ShallowCopy(stencilToImage.GetOutput())
       imageToWorld = vtk.vtkMatrix4x4()
       modifierLabelmap.GetImageToWorldMatrix(imageToWorld)
-      orientedStencilPositionerOuput.SetImageToWorldMatrix(imageToWorld)
+      orientedStencilPositionerOutput.SetImageToWorldMatrix(imageToWorld)
 
-      vtkSegmentationCore.vtkOrientedImageDataResample.ModifyImage(modifierLabelmap, orientedStencilPositionerOuput,
-                                                                   vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
+      vtkSegmentationCore.vtkOrientedImageDataResample.ModifyImage(
+        modifierLabelmap, orientedStencilPositionerOutput,
+        vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
 
       modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd
       if operationName == "ERASE_INSIDE" or operationName == "ERASE_OUTSIDE":
