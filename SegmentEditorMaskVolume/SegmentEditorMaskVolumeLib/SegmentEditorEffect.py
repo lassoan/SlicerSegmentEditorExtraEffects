@@ -1,3 +1,7 @@
+# This is a complete example that computes histogram for each region of a volume defined by a segment.
+# This script requires installation of  SegmentEditorExtraEffects extension, as it uses Mask volume effect,
+# which is provided by this extension.
+
 import os
 import vtk, qt, ctk, slicer
 import logging
