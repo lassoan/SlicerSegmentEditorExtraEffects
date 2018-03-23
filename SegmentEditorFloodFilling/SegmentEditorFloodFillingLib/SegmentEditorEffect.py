@@ -4,7 +4,7 @@ import logging
 from SegmentEditorEffects import *
 
 class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
-  """This effect uses Watershed algorithm to partition the input volume"""
+  """This effect fills a region enclosed in a segment at clicked position"""
 
   def __init__(self, scriptedEffect):
     scriptedEffect.name = 'Flood filling'
