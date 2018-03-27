@@ -1,6 +1,6 @@
 
 #-----------------------------------------------------------------------------
-set(MODULE_NAME SegmentEditorFloodFilling)
+set(MODULE_NAME SegmentEditorHollow)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
