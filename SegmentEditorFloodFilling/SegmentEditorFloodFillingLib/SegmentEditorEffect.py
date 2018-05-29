@@ -65,6 +65,7 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     
   def masterVolumeNodeChanged(self):
     # Set scalar range of master volume image data to threshold slider
+    import math
     import vtkSegmentationCorePython as vtkSegmentationCore
     masterImageData = self.scriptedEffect.masterVolumeImageData()
     if not masterImageData:
@@ -76,7 +77,6 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     # Intensity slider
     lo, hi = masterImageData.GetScalarRange()
     if (hi-lo > 0):
-      import math
       range = hi-lo
       stepSize = 1
       
