@@ -104,6 +104,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     try:
+      self.reset() # restore initial seeds in the labelmap
       slicer.util.showStatusMessage('Running FastMarching...', 2000)
       self.scriptedEffect.saveStateForUndo()
       self.fastMarching(self.percentMax.value)
@@ -222,9 +223,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.fm.Modified()
     self.fm.Update()
 
-    self.fm.show(1)
-    self.fm.Modified()
-    self.fm.Update()
+    self.updateLabel(self.marcher.value/self.marcher.maximum)
 
     logging.info('FastMarching march update completed')
     
