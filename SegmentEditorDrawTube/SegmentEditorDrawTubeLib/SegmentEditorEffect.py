@@ -377,7 +377,7 @@ class DrawTubeLogic(object):
       modelDisplayNode.SetColor(r, g, b)  # Edited segment color
       modelDisplayNode.BackfaceCullingOff()
       modelDisplayNode.SliceIntersectionVisibilityOn()
-      modelDisplayNode.SetSliceIntersectionThickness(4)
+      modelDisplayNode.SetSliceIntersectionThickness(2)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       slicer.mrmlScene.AddNode(modelDisplayNode)
       outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
