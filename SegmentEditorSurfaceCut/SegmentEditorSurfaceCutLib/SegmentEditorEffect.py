@@ -195,10 +195,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       if displayNode is None:
         logging.error("preview: Invalid segmentation display node!")
         color = [0.5, 0.5, 0.5]
-      segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-      r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-      if (r,g,b) != self.segmentModel.GetDisplayNode().GetColor():
-        self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
+      if self.segmentModel.GetDisplayNode():
+        segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+        r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+        if (r,g,b) != self.segmentModel.GetDisplayNode().GetColor():
+          self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
 
   def onCancel(self):
     self.reset()
@@ -325,9 +326,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     if segmentID and self.segmentModel:
-      r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-      if (r, g, b) != self.segmentModel.GetDisplayNode().GetColor():
-        self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
+      if self.segmentModel.GetDisplayNode():
+        r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+        if (r, g, b) != self.segmentModel.GetDisplayNode().GetColor():
+          self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
 
     self.updateGUIFromMRML()
 
