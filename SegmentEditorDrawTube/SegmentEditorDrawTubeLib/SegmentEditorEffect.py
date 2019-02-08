@@ -70,6 +70,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.radiusSpinBox.unitAwareProperties = slicer.qMRMLSpinBox.MaximumValue | slicer.qMRMLSpinBox.Precision | slicer.qMRMLSpinBox.Prefix | slicer.qMRMLSpinBox.Suffix
     self.scriptedEffect.addLabeledOptionsWidget("Radius: ", self.radiusSpinBox)
 
+    # Segments per point spinbox
+    self.segmentsSpinBox = slicer.qMRMLSpinBox()
+    self.segmentsSpinBox.value = self.logic.segments
+    self.segmentsSpinBox.unitAwareProperties = slicer.qMRMLSpinBox.MaximumValue | slicer.qMRMLSpinBox.Precision | slicer.qMRMLSpinBox.Prefix | slicer.qMRMLSpinBox.Suffix
+    self.scriptedEffect.addLabeledOptionsWidget("Segments Per Point: ", self.segmentsSpinBox)
+
+
     # Interpolation buttons
     self.piecewiseLinearButton = qt.QRadioButton("Piecewise linear")
     self.interpolationRadioButtons.append(self.piecewiseLinearButton)
@@ -127,6 +134,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.editButton.connect('clicked()', self.onEdit)
     self.fiducialPlacementToggle.placeButton().clicked.connect(self.onFiducialPlacementToggleChanged)
     self.radiusSpinBox.connect('valueChanged(double)', self.onRadiusChanged)
+    self.segmentsSpinBox.connect('valueChanged(double)', self.onSegmentsChanged)
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
@@ -191,6 +199,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onRadiusChanged(self, radius):
     self.logic.radius = radius
+    self.updateModelFromSegmentMarkupNode()
+
+  def onSegmentsChanged(self, segments):
+    self.logic.segments = segments
     self.updateModelFromSegmentMarkupNode()
 
   def onSegmentModified(self, caller, event):
@@ -359,6 +371,7 @@ class DrawTubeLogic(object):
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
     self.radius = 1.0
+    self.segments = 5
     import vtkSlicerMarkupsToModelModuleLogicPython
     self.curveGenerator = vtkSlicerMarkupsToModelModuleLogicPython.vtkCurveGenerator()
 
@@ -404,7 +417,7 @@ class DrawTubeLogic(object):
     markupsToModel = slicer.modules.markupstomodel.logic()
     # Create tube from points
     markupsToModel.UpdateOutputCurveModel( inputMarkup, outputModel,
-      interpolationType, False, self.radius, 8, 5, True, 3,
+      interpolationType, False, self.radius, 8, self.segments, True, 3,
       slicer.vtkMRMLMarkupsToModelNode.RawIndices, self.curveGenerator,
       polynomialFitType )
 
