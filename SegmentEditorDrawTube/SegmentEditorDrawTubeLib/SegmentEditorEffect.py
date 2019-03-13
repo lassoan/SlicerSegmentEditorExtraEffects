@@ -369,7 +369,7 @@ class DrawTubeLogic(object):
 
     # Create default model display node if does not exist yet
     if not outputModel.GetDisplayNode():
-      modelDisplayNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLModelDisplayNode")
+      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
 
       # Get color of edited segment
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -381,7 +381,6 @@ class DrawTubeLogic(object):
       modelDisplayNode.SliceIntersectionVisibilityOn()
       modelDisplayNode.SetSliceIntersectionThickness(2)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
-      slicer.mrmlScene.AddNode(modelDisplayNode)
       outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
       outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
