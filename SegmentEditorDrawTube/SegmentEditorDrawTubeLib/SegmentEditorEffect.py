@@ -359,8 +359,7 @@ class DrawTubeLogic(object):
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
     self.radius = 1.0
-    import vtkSlicerMarkupsToModelModuleLogicPython
-    self.curveGenerator = vtkSlicerMarkupsToModelModuleLogicPython.vtkCurveGenerator()
+    self.curveGenerator = slicer.vtkCurveGenerator()
 
   def updateModelFromMarkup(self, inputMarkup, outputModel):
     """
