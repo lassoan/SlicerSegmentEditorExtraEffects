@@ -62,7 +62,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     fiducialActionLayout.addWidget(self.fiducialPlacementToggle)
     fiducialActionLayout.addWidget(self.editButton)
     self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialActionLayout)
-
+    
     # Radius spinbox
     self.radiusSpinBox = slicer.qMRMLSpinBox()
     self.radiusSpinBox.value = self.logic.radius
@@ -91,6 +91,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.interpolationRadioButtons.append(self.movingPolynomialButton)
     self.buttonToInterpolationTypeMap[self.movingPolynomialButton] = "MOVING_POLYNOMIAL"
 
+    # Segments per point spinbox
+    self.numberOfLineSegmentsSpinBox = qt.QSpinBox()
+    self.numberOfLineSegmentsSpinBox.value = 15
+    # To keep GUI simple, we do not show numberOfLineSegmentsSpinBox.
+    # Default value should work for most cases and modules can programmatically change this value, if needed.
+    # If user feedback confirms that this parameter must be exposed then the next line can be uncommented.
+    # self.scriptedEffect.addLabeledOptionsWidget("Segments between points: ", self.numberOfLineSegmentsSpinBox)
+    
     # Interpolation buttons layout
     interpolationLayout = qt.QGridLayout()
     interpolationLayout.addWidget(self.piecewiseLinearButton, 0, 0)
@@ -127,6 +135,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.editButton.connect('clicked()', self.onEdit)
     self.fiducialPlacementToggle.placeButton().clicked.connect(self.onFiducialPlacementToggleChanged)
     self.radiusSpinBox.connect('valueChanged(double)', self.onRadiusChanged)
+    self.numberOfLineSegmentsSpinBox.connect('valueChanged(int)', self.onNumberOfLineSegmentsChanged)
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
@@ -151,6 +160,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("Interpolation", "MOVING_POLYNOMIAL")
+    self.scriptedEffect.setParameterDefault("NumberOfLineSegmentsBetweenControlPoints", 15) 
 
   def updateGUIFromMRML(self):
     if self.segmentMarkupNode:
@@ -166,6 +176,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     interpolationButton = [key for key, value in self.buttonToInterpolationTypeMap.iteritems() if value ==
                        self.scriptedEffect.parameter("Interpolation")][0]
     interpolationButton.setChecked(True)
+
+    self.numberOfLineSegmentsSpinBox.value = self.scriptedEffect.integerParameter("NumberOfLineSegmentsBetweenControlPoints")
 
   #
   # Effect specific methods (the above ones are the API methods to override)
@@ -193,6 +205,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.logic.radius = radius
     self.updateModelFromSegmentMarkupNode()
 
+  def onNumberOfLineSegmentsChanged(self, numberOfLineSegments):
+    self.scriptedEffect.setParameter("NumberOfLineSegmentsBetweenControlPoints", numberOfLineSegments)
+    self.updateModelFromSegmentMarkupNode()
+    
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
       self.reset()
@@ -406,11 +422,13 @@ class DrawTubeLogic(object):
     elif interpolationName == "MOVING_POLYNOMIAL":
       interpolationType = slicer.vtkMRMLMarkupsToModelNode.Polynomial
       polynomialFitType = slicer.vtkMRMLMarkupsToModelNode.MovingLeastSquares
+      
+    NumberOfLineSegmentsBetweenControlPoints = self.scriptedEffect.integerParameter("NumberOfLineSegmentsBetweenControlPoints") 
 
     markupsToModel = slicer.modules.markupstomodel.logic()
     # Create tube from points
     markupsToModel.UpdateOutputCurveModel( inputMarkup, outputModel,
-      interpolationType, False, self.radius, 8, 5, True, 3,
+      interpolationType, False, self.radius, 8, NumberOfLineSegmentsBetweenControlPoints, True, 3,
       slicer.vtkMRMLMarkupsToModelNode.RawIndices, self.curveGenerator,
       polynomialFitType )
 
