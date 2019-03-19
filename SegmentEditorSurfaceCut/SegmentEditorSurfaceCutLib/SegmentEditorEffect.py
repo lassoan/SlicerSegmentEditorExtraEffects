@@ -15,7 +15,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     # Effect-specific members
     self.segmentMarkupNode = None
-    self.segmentMarkupNodeObserver = None
+    self.segmentMarkupNodeObservers = []
     self.segmentEditorNode = None
     self.segmentEditorNodeObserver = None
     self.segmentModel = None
@@ -288,18 +288,26 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.updateGUIFromMRML()
 
   def setAndObserveSegmentMarkupNode(self, segmentMarkupNode):
-    if segmentMarkupNode == self.segmentMarkupNode and self.segmentMarkupNodeObserver:
+    if segmentMarkupNode == self.segmentMarkupNode and self.segmentMarkupNodeObservers:
       # no change and node is already observed
       return
     # Remove observer to old parameter node
-    if self.segmentMarkupNode and self.segmentMarkupNodeObserver:
-      self.segmentMarkupNode.RemoveObserver(self.segmentMarkupNodeObserver)
-      self.segmentMarkupNodeObserver = None
+    if self.segmentMarkupNode and self.segmentMarkupNodeObservers:
+      for observer in self.segmentMarkupNodeObservers:
+        self.segmentMarkupNode.RemoveObserver(observer)
+      self.segmentMarkupNodeObservers = []
     # Set and observe new parameter node
     self.segmentMarkupNode = segmentMarkupNode
     if self.segmentMarkupNode:
-      self.segmentMarkupNodeObserver = self.segmentMarkupNode.AddObserver(vtk.vtkCommand.ModifiedEvent,
-                                                                          self.onSegmentMarkupNodeModified)
+      if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+        eventIds = [ vtk.vtkCommand.ModifiedEvent,
+          slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+          slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+          slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
+      else:
+        eventIds = [ vtk.vtkCommand.ModifiedEvent ]
+      for eventId in eventIds:
+        self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
     # Update GUI
     self.updateModelFromSegmentMarkupNode()
 
