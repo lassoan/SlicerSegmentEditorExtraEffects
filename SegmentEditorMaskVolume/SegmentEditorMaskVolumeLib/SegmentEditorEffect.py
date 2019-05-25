@@ -347,7 +347,7 @@ modifiable.
     self.maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolume, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
-
+  @staticmethod
   def maskVolumeWithSegment(self, segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
