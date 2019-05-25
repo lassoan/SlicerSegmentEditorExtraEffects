@@ -29,6 +29,7 @@ add_subdirectory(SegmentEditorMaskVolume)
 add_subdirectory(SegmentEditorSurfaceCut)
 add_subdirectory(SegmentEditorWatershed)
 add_subdirectory(SegmentEditorDrawTube)
+add_subdirectory(SegmentEditorCropSegment)
 IF (Slicer_VERSION VERSION_LESS 4.9)
   # Slicer 4.9 and above has Hollow effect built in
   add_subdirectory(SegmentEditorHollow)
