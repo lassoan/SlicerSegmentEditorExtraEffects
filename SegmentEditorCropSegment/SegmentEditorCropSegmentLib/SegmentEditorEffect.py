@@ -35,7 +35,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """<html>Use the currently selected segment to define the cropped image extent. Cropping is applied to the master volume by default. Optionally, padding can be added to the output image in each axis.<p>
+    return """<html>Create a volume node for each segment, cropped to the segment extent. Cropping is applied to the master volume by default. Optionally, padding can be added to the output volume in each axis.<p>
 </html>"""
  
   def setupOptionsFrame(self):
@@ -53,39 +53,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.inputVolumeSelector.setToolTip("Volume to crop. Default is current master volume node.")
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
  
-    self.inputVisibilityButton = qt.QToolButton()
-    self.inputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
-    self.inputVisibilityButton.setAutoRaise(True)
-    self.inputVisibilityButton.setCheckable(True)
-    self.inputVisibilityButton.connect('clicked()', self.onInputVisibilityButtonClicked)
     inputLayout = qt.QHBoxLayout()
-    inputLayout.addWidget(self.inputVisibilityButton)
     inputLayout.addWidget(self.inputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", inputLayout)
- 
-    # output volume selector
-    self.outputVolumeSelector = slicer.qMRMLNodeComboBox()
-    self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
-    self.outputVolumeSelector.selectNodeUponCreation = True
-    self.outputVolumeSelector.addEnabled = True
-    self.outputVolumeSelector.removeEnabled = True
-    self.outputVolumeSelector.renameEnabled = True
-    self.outputVolumeSelector.noneEnabled = True
-    self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
-    self.outputVolumeSelector.showHidden = False
-    self.outputVolumeSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputVolumeSelector.setToolTip("Cropped output volume. It may be the same as the input volume for cumulative cropping.")
-    self.outputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputVolumeChanged)
- 
-    self.outputVisibilityButton = qt.QToolButton()
-    self.outputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
-    self.outputVisibilityButton.setAutoRaise(True)
-    self.outputVisibilityButton.setCheckable(True)
-    self.outputVisibilityButton.connect('clicked()', self.onOutputVisibilityButtonClicked)
-    outputLayout = qt.QHBoxLayout()
-    outputLayout.addWidget(self.outputVisibilityButton)
-    outputLayout.addWidget(self.outputVolumeSelector)
-    self.scriptedEffect.addLabeledOptionsWidget("Output Volume: ", outputLayout)
      
     # X pad value
     self.xPad = qt.QSpinBox()
@@ -170,10 +140,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def createCursor(self, widget):
     # Turn off effect-specific cursor for this effect
     return slicer.util.mainWindow().cursor
- 
-  def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault("InputVisibility", "True")
-    self.scriptedEffect.setParameterDefault("OutputVisibility", "False")
    
   def onVoxelXPadValueChanged(self):
     #reset percentage boxes to match voxel number
@@ -218,144 +184,40 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.zPad.setValue( round(zValue) ) 
      
   def updateGUIFromMRML(self):
-    inputVisible = self.scriptedEffect.parameter("InputVisibility")
-    outputVisible = self.scriptedEffect.parameter("OutputVisibility")
     inputVolume = self.inputVolumeSelector.currentNode()
     if inputVolume is None:
       inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
-    outputVolume = self.outputVolumeSelector.currentNode()
     masterVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
-    visibleIcon = qt.QIcon(":/Icons/Small/SlicerVisible.png")
-    invisibleIcon = qt.QIcon(":/Icons/Small/SlicerInvisible.png")
-    if inputVisible == "True" and outputVisible == "True":
-      self.inputVisibilityButton.setIcon(visibleIcon)
-      self.outputVisibilityButton.setIcon(visibleIcon)
-      slicer.util.setSliceViewerLayers(background=inputVolume)
-    elif inputVisible == "True":
-      self.inputVisibilityButton.setIcon(visibleIcon)
-      self.outputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=inputVolume)
-    elif outputVisible == "True":
-      self.outputVisibilityButton.setIcon(visibleIcon)
-      self.inputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=outputVolume)
-    else:
-      self.outputVisibilityButton.setIcon(invisibleIcon)
-      self.inputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=masterVolume)
-      self.inputVisibilityButton.setEnabled(False)
- 
-    self.inputVisibilityButton.setEnabled(not(inputVolume is masterVolume and inputVisible == "True"))
-    self.outputVisibilityButton.setEnabled(not((outputVolume is masterVolume and outputVisible == "True") or outputVolume is None))
- 
-    self.inputVisibilityButton.setChecked(self.inputVisibilityButton.isEnabled() and inputVisible == "True")
-    self.outputVisibilityButton.setChecked(self.outputVisibilityButton.isEnabled() and outputVisible == "True")
- 
-  def activate(self):
-    self.scriptedEffect.setParameter("InputVisibility", "True")
- 
-  def deactivate(self):
-    if self.outputVolumeSelector.currentNode() is not self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-      self.scriptedEffect.setParameter("OutputVisibility", "False")
-    slicer.util.setSliceViewerLayers(background=self.scriptedEffect.parameterSetNode().GetMasterVolumeNode())
- 
-  def onOperationSelectionChanged(self, operationName, toggle):
-    if not toggle:
-      return
-    if self.outputVolumeSelector.noneDisplay != "(Create new Volume)":
-      self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
-      self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
-      self.outputVolumeSelector.setCurrentNode(None)
  
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
     if inputVolume is None:
       inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     return inputVolume
- 
-  def onInputVisibilityButtonClicked(self):
-    if self.inputVisibilityButton.isEnabled():
-      if self.inputVisibilityButton.isChecked():
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-        if self.outputVolumeSelector.currentNode() is self.getInputVolume():
-          self.scriptedEffect.setParameter("OutputVisibility", "True")
-        elif self.scriptedEffect.parameter("OutputVisibility") == "True":
-          self.scriptedEffect.setParameter("OutputVisibility", "False")
-      else:
-        self.scriptedEffect.setParameter("InputVisibility", "False")
-        if self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-          self.scriptedEffect.setParameter("OutputVisibility", "True")
-        elif self.outputVolumeSelector.currentNode() is self.getInputVolume():
-          self.scriptedEffect.setParameter("OutputVisibility", "False")
-    self.updateGUIFromMRML()
- 
-  def onOutputVisibilityButtonClicked(self):
-    if self.outputVisibilityButton.isEnabled() and self.outputVolumeSelector.currentNode():
-      if self.outputVisibilityButton.isChecked():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        if self.getInputVolume() is self.outputVolumeSelector.currentNode():
-          self.scriptedEffect.setParameter("InputVisibility", "True")
-        elif self.scriptedEffect.parameter("InputVisibility") == "True":
-          self.scriptedEffect.setParameter("InputVisibility", "False")
-      else:
-        self.scriptedEffect.setParameter("OutputVisibility", "False")
-        if self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-          self.scriptedEffect.setParameter("InputVisibility", "True")
-        elif self.getInputVolume() is self.outputVolumeSelector.currentNode():
-          self.scriptedEffect.setParameter("InputVisibility", "False")
-    self.updateGUIFromMRML()
- 
+
   def onInputVolumeChanged(self):
-    if self.getInputVolume() is self.outputVolumeSelector.currentNode():
-      if self.scriptedEffect.parameter("OutputVisibility") == "True":
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      else:
-        self.scriptedEffect.setParameter("InputVisibility", "False")
-    elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("OutputVisibility") == "False":
-      self.scriptedEffect.setParameter("InputVisibility", "True")
-    else:
-      self.scriptedEffect.setParameter("InputVisibility", "False")
     self.updateGUIFromMRML()
- 
-  def onOutputVolumeChanged(self):
-    if self.outputVolumeSelector.currentNode() is self.getInputVolume():
-      if self.scriptedEffect.parameter("InputVisibility") == "True":
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-      elif self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      else:
-        self.scriptedEffect.setParameter("OutputVisibility", "False")
-    elif self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("InputVisibility") == "False":
-      self.scriptedEffect.setParameter("OutputVisibility", "True")
-    else:
-      self.scriptedEffect.setParameter("OutputVisibility", "False")
-    self.updateGUIFromMRML()
- 
   
   def onApply(self):
     inputVolume = self.getInputVolume()
-    outputVolume = self.outputVolumeSelector.currentNode()
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-     
-    if not outputVolume:
-      # Create new node for output
-      volumesLogic = slicer.modules.volumes.logic()
-      scene = inputVolume.GetScene()
-      outputVolumeName = inputVolume.GetName()+ segmentID
-      outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
-      self.outputVolumeSelector.setCurrentNode(outputVolume)
-
-    slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
+    volumesLogic = slicer.modules.volumes.logic()
+    scene = inputVolume.GetScene()
     padExtent = [self.xPad.value, self.zPad.value, self.yPad.value]
-    self.cropVolumeWithSegment(segmentationNode, segmentID, inputVolume, outputVolume, padExtent, self.fillValue.value)
-    qt.QApplication.restoreOverrideCursor()
- 
- 
+    #iterate over segments
+    for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
+      segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
+      segmentIDs = vtk.vtkStringArray()
+      segmentIDs.InsertNextValue(segmentID)
+      # create volume for output
+      outputVolumeName = inputVolume.GetName() + '_' + segmentID
+      outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
+      # crop segment
+      slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
+      self.cropVolumeWithSegment(segmentationNode, segmentID, inputVolume, outputVolume, padExtent, self.fillValue.value)
+      qt.QApplication.restoreOverrideCursor()
+  
   def cropVolumeWithSegment(self, segmentationNode, segmentID, inputVolumeNode, outputVolumeNode, padRegion, padValue):
     """
     Fill voxels of the input volume inside/outside the Cropping model with the provided fill value
