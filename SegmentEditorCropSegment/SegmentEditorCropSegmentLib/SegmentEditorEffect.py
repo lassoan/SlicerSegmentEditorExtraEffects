@@ -9,6 +9,7 @@ from SegmentEditorEffects import *
 import vtkSegmentationCorePython as vtkSegmentationCore 
 import sitkUtils
 import SimpleITK as sitk
+
  
 class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   """This effect uses a currently existing segment to crop the master volume with a chosen voxel fill value."""
@@ -35,7 +36,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """<html>Create a volume node for each segment, cropped to the segment extent. Cropping is applied to the master volume by default. Optionally, padding can be added to the output volume in each axis.<p>
+    return """<html>Create a volume node for each segment, cropped to the segment extent. Cropping is applied to the master volume by default. Optionally, padding can be added to the output volumes.<p>
 </html>"""
  
   def setupOptionsFrame(self):
@@ -57,73 +58,36 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     inputLayout.addWidget(self.inputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", inputLayout)
      
-    # X pad value
-    self.xPad = qt.QSpinBox()
-    self.xPad.setToolTip("Choose the number of voxels used to pad the image in the X-axis")
-    self.xPad.minimum = 0
-    self.xPad.maximum = 1000
-    self.xPad.connect("valueChanged(int)", self.onVoxelXPadValueChanged)
-    self.xPadLabel = qt.QLabel("X Pad voxels: ")
+    # Pad size
+    self.pad = qt.QSpinBox()
+    self.pad.setToolTip("Choose the number of voxels used to pad the image in each dimension")
+    self.pad.minimum = 0
+    self.pad.maximum = 1000
+    self.pad.connect("valueChanged(int)", self.onVoxelPadValueChanged)
+    self.padLabel = qt.QLabel("Pad voxels: ")
      
-    self.xPadPercent = qt.QSpinBox()
-    self.xPadPercent.setToolTip("Choose size of the padding in the X-axis as a percent of the original image size")
-    self.xPadPercent.minimum = 0
-    self.xPadPercent.maximum = 100
-    self.xPadPercent.connect("valueChanged(double)", self.onVoxelXPadPercentChanged)
-    self.xPadPercentLabel = qt.QLabel("X Pad percentage: ")
- 
-    # Y pad value
-    self.yPad = qt.QSpinBox()
-    self.yPad.setToolTip("Choose the number of voxels used to pad the image in the Y-axis")
-    self.yPad.minimum = 0
-    self.yPad.maximum = 1000
-    self.yPad.connect("valueChanged(int)", self.onVoxelYPadValueChanged)
-    self.yPadLabel = qt.QLabel("Y Pad voxels: ")
-     
-    self.yPadPercent = qt.QSpinBox()
-    self.yPadPercent.setToolTip("Choose size of the padding in the Y-axis as a percent of the original image size")
-    self.yPadPercent.minimum = 0
-    self.yPadPercent.maximum = 100
-    self.yPadPercent.connect("valueChanged(double)", self.onVoxelYPadPercentChanged)
-    self.yPadPercentLabel = qt.QLabel("Y Pad percentage: ")
- 
-    # Z pad value
-    self.zPad = qt.QSpinBox()
-    self.zPad.setToolTip("Choose the number of voxels used to pad the image in the Z-axis")
-    self.zPad.minimum = 0
-    self.zPad.maximum = 1000
-    self.zPad.connect("valueChanged(int)", self.onVoxelZPadValueChanged)
-    self.zPadLabel = qt.QLabel("Z Pad voxels: ")
-     
-    self.zPadPercent = qt.QSpinBox()
-    self.zPadPercent.setToolTip("Choose size of the padding in the Z-axis as a percent of the original image size")
-    self.zPadPercent.minimum = 0
-    self.zPadPercent.maximum = 100
-    self.zPadPercent.connect("valueChanged(double)", self.onVoxelZPadPercentChanged)
-    self.zPadPercentLabel = qt.QLabel("Z Pad percentage: ")
- 
+    self.padPercent = qt.QSpinBox()
+    self.padPercent.setToolTip("Choose size of the padding in each dimension as a percent of the original image size")
+    self.padPercent.minimum = 0
+    self.padPercent.maximum = 100
+    self.padPercent.connect("valueChanged(double)", self.onVoxelPadPercentChanged)
+    self.padPercentLabel = qt.QLabel("Pad percentage: ")
+
     # Fill value layouts
     # addWidget(*Widget, row, column, rowspan, colspan)
     padValueLayout = qt.QGridLayout()
-    padValueLayout.addWidget(self.xPadLabel,1,1,1,1)
-    padValueLayout.addWidget(self.xPad,1,2,1,1)
-    padValueLayout.addWidget(self.xPadPercentLabel,1,3,1,1)
-    padValueLayout.addWidget(self.xPadPercent,1,4,1,1)
-    padValueLayout.addWidget(self.yPadLabel,2,1,1,1)
-    padValueLayout.addWidget(self.yPad,2,2,1,1)
-    padValueLayout.addWidget(self.yPadPercentLabel,2,3,1,1)
-    padValueLayout.addWidget(self.yPadPercent,2,4,1,1)
-    padValueLayout.addWidget(self.zPadLabel,3,1,1,1)
-    padValueLayout.addWidget(self.zPad,3,2,1,1)
-    padValueLayout.addWidget(self.zPadPercentLabel,3,3,1,1)
-    padValueLayout.addWidget(self.zPadPercent,3,4,1,1)
+    padValueLayout.addWidget(self.padLabel,1,1,1,1)
+    padValueLayout.addWidget(self.pad,1,2,1,1)
+    padValueLayout.addWidget(self.padPercentLabel,1,3,1,1)
+    padValueLayout.addWidget(self.padPercent,1,4,1,1)
 
     self.scriptedEffect.addOptionsWidget(padValueLayout)
     
     self.fillValue = qt.QSpinBox()
-    self.fillValue.setToolTip("Value that the image will be padded with")
-    self.fillValue.minimum = 0
-    self.fillValue.maximum = 1000
+    self.fillValue.setToolTip("Choose the voxel intensity that will be used to pad the output volumes.")
+    self.fillValue.minimum = -32768
+    self.fillValue.maximum = 65535
+    self.fillValue.value=0
     self.fillValueLabel = qt.QLabel("Fill value: ")
     
     fillValueLayout = qt.QFormLayout()
@@ -133,7 +97,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
-    self.applyButton.setToolTip("Crop image using the extent of the active segment. No undo operation available once applied.")
+    self.applyButton.setToolTip("Generate volumes for each segment, cropped to the segment extent. No undo operation available once applied.")
     self.scriptedEffect.addOptionsWidget(self.applyButton)
     self.applyButton.connect('clicked()', self.onApply)
  
@@ -141,47 +105,19 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Turn off effect-specific cursor for this effect
     return slicer.util.mainWindow().cursor
    
-  def onVoxelXPadValueChanged(self):
+  def onVoxelPadValueChanged(self):
     #reset percentage boxes to match voxel number
     dimension = self.getInputVolume().GetImageData().GetDimensions() 
-    xValue = float(self.xPad.value)/dimension[0]*100
-    if(abs(xValue-self.xPadPercent.value) > 1):
-      self.xPadPercent.setValue( round(xValue,2) )
-
-  def onVoxelYPadValueChanged(self):
-    #reset percentage boxes to match voxel number
-    dimension = self.getInputVolume().GetImageData().GetDimensions()       
-    yValue = float(self.yPad.value)/dimension[1]*100
-    if(abs(yValue-self.yPadPercent.value) > 1):
-      self.yPadPercent.setValue( round(yValue,2) )
+    newPadValue = float(self.pad.value)/dimension[0]*100
+    if(abs(newPadValue-self.padPercent.value) > 1):
+      self.padPercent.setValue( round(newPadValue,2) )
     
-  def onVoxelZPadValueChanged(self):
-    #reset percentage boxes to match voxel number
-    dimension = self.getInputVolume().GetImageData().GetDimensions()     
-    zValue = float(self.zPad.value)/dimension[2]*100
-    if(abs(zValue-self.zPadPercent.value) > 1):
-      self.zPadPercent.setValue( round(zValue,2) )
-    
-  def onVoxelXPadPercentChanged(self):
+  def onVoxelPadPercentChanged(self):
     #reset voxel boxes to match percents
     dimension = self.getInputVolume().GetImageData().GetDimensions() 
-    xValue = float(self.xPadPercent.value)/100*dimension[0]
-    if(abs(xValue-self.xPad.value) > 1):
-      self.xPad.setValue( round(xValue) )
-
-  def onVoxelYPadPercentChanged(self):
-    #reset voxel boxes to match percents 
-    dimension = self.getInputVolume().GetImageData().GetDimensions() 
-    yValue = float(self.yPadPercent.value)/100*dimension[1]
-    if(abs(yValue-self.yPad.value) > 1):
-      self.yPad.setValue( round(yValue) )
-
-  def onVoxelZPadPercentChanged(self):
-    #reset voxel boxes to match percents
-    dimension = self.getInputVolume().GetImageData().GetDimensions()  
-    zValue = float(self.zPadPercent.value)/100*dimension[2]
-    if(abs(zValue-self.zPad.value) > 1):
-      self.zPad.setValue( round(zValue) ) 
+    newPadPercent = float(self.padPercent.value)/100*dimension[0]
+    if(abs(newPadPercent-self.pad.value) > 1):
+      self.pad.setValue( round(newPadPercent) )
      
   def updateGUIFromMRML(self):
     inputVolume = self.inputVolumeSelector.currentNode()
@@ -204,7 +140,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     volumesLogic = slicer.modules.volumes.logic()
     scene = inputVolume.GetScene()
-    padExtent = [self.xPad.value, self.zPad.value, self.yPad.value]
+    padExtent = [-self.pad.value, self.pad.value, -self.pad.value, self.pad.value, -self.pad.value, self.pad.value]
     #iterate over segments
     for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
       segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
@@ -215,8 +151,37 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       # crop segment
       slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-      self.cropVolumeWithSegment(segmentationNode, segmentID, inputVolume, outputVolume, padExtent, self.fillValue.value)
+      #self.cropVolumeWithSegment(segmentationNode, segmentID, inputVolume, outputVolume, padExtent, self.fillValue.value)
+      
+      # mask image with segment
+      import SegmentEditorMaskVolumeLib
+      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(self,segmentationNode, segmentID, "FILL_OUTSIDE", [0], inputVolume, outputVolume)
+      
+      #calculate extent of masked image
+      cropThreshold = 0
+      img = slicer.modules.segmentations.logic().CreateOrientedImageDataFromVolumeNode(outputVolume) 
+      img.UnRegister(None) 
+      extent=[0,0,0,0,0,0]
+      vtkSegmentationCore.vtkOrientedImageDataResample.CalculateEffectiveExtent(img, extent, cropThreshold) 
+      print("segment extent: ", extent)
+      
+      # pad and crop
+      padFilter = vtk.vtkImageConstantPad()
+      padFilter.SetInputData(outputVolume.GetImageData())
+      padFilter.SetConstant(self.fillValue.value)
+      for i in range(len(extent)):
+        extent[i]=extent[i]+padExtent[i]
+      
+      print("padded extent: ", extent)      
+      padFilter.SetOutputWholeExtent(extent)
+      padFilter.Update()
+      
+      outputVolume.SetAndObserveImageData(padFilter.GetOutput())
+      #slicer.modules.segmentations.logic().CopyOrientedImageDataToVolumeNode(padFilter.GetOutput(), outputVolume)
+      
       qt.QApplication.restoreOverrideCursor()
+  
+  
   
   def cropVolumeWithSegment(self, segmentationNode, segmentID, inputVolumeNode, outputVolumeNode, padRegion, padValue):
     """
