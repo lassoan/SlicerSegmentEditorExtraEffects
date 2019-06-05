@@ -66,7 +66,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.pad.connect("valueChanged(int)", self.onVoxelPadValueChanged)
     self.padLabel = qt.QLabel("Pad voxels: ")
      
-    self.padPercent = qt.QSpinBox()
+    self.padPercent = qt.QDoubleSpinBox()
     self.padPercent.setToolTip("Choose size of the padding in each dimension as a percent of the original image size")
     self.padPercent.minimum = 0
     self.padPercent.maximum = 100
@@ -146,14 +146,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
       segmentIDs = vtk.vtkStringArray()
       segmentIDs.InsertNextValue(segmentID)
+      
       # create volume for output
       outputVolumeName = inputVolume.GetName() + '_' + segmentID
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
+      
       # crop segment
       slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-      #self.cropVolumeWithSegment(segmentationNode, segmentID, inputVolume, outputVolume, padExtent, self.fillValue.value)
-      
-      # mask image with segment
       import SegmentEditorMaskVolumeLib
       SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(self,segmentationNode, segmentID, "FILL_OUTSIDE", [0], inputVolume, outputVolume)
       
@@ -163,84 +162,24 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       img.UnRegister(None) 
       extent=[0,0,0,0,0,0]
       vtkSegmentationCore.vtkOrientedImageDataResample.CalculateEffectiveExtent(img, extent, cropThreshold) 
-      print("segment extent: ", extent)
-      
+
       # pad and crop
+      cropFilter = vtk.vtkImageConstantPad()
+      cropFilter.SetInputData(outputVolume.GetImageData())
+      cropFilter.SetConstant(self.fillValue.value)   
+      cropFilter.SetOutputWholeExtent(extent)
+      cropFilter.Update()
+      
       padFilter = vtk.vtkImageConstantPad()
-      padFilter.SetInputData(outputVolume.GetImageData())
+      padFilter.SetInputData(cropFilter.GetOutput())
       padFilter.SetConstant(self.fillValue.value)
       for i in range(len(extent)):
         extent[i]=extent[i]+padExtent[i]
-      
-      print("padded extent: ", extent)      
+           
       padFilter.SetOutputWholeExtent(extent)
       padFilter.Update()
-      
       outputVolume.SetAndObserveImageData(padFilter.GetOutput())
-      #slicer.modules.segmentations.logic().CopyOrientedImageDataToVolumeNode(padFilter.GetOutput(), outputVolume)
       
       qt.QApplication.restoreOverrideCursor()
   
   
-  
-  def cropVolumeWithSegment(self, segmentationNode, segmentID, inputVolumeNode, outputVolumeNode, padRegion, padValue):
-    """
-    Fill voxels of the input volume inside/outside the Cropping model with the provided fill value
-    """
- 
-    segmentIDs = vtk.vtkStringArray()
-    segmentIDs.InsertNextValue(segmentID)
-    intensityRange = inputVolumeNode.GetImageData().GetScalarRange()
-    maskedVolume = slicer.modules.volumes.logic().CreateAndAddLabelVolume(inputVolumeNode, "TemporaryVolumeCrop")
-    if not maskedVolume:
-      logging.error("cropVolumeWithSegment failed: invalid maskedVolume")
-      return False
- 
-    if not slicer.vtkSlicerSegmentationsModuleLogic.ExportSegmentsToLabelmapNode(segmentationNode, segmentIDs, maskedVolume, inputVolumeNode):
-      logging.error("cropVolumeWithSegment failed: ExportSegmentsToLabelmapNode error")
-      slicer.mrmlScene.RemoveNode(maskedVolume.GetDisplayNode().GetColorNode())
-      slicer.mrmlScene.RemoveNode(maskedVolume.GetDisplayNode())
-      slicer.mrmlScene.RemoveNode(maskedVolume)
-      return False
- 
-    # Crop to region greater than threshold
-    maskToStencil = vtk.vtkImageToImageStencil()
-    maskToStencil.ThresholdByLower(0)
-    maskToStencil.SetInputData(maskedVolume.GetImageData())
-    stencil = vtk.vtkImageStencil()
-    stencil.SetInputData(inputVolumeNode.GetImageData())
-    stencil.SetStencilConnection(maskToStencil.GetOutputPort())
-    stencil.SetReverseStencil(1)
-    stencil.SetBackgroundValue(intensityRange[0]-1)
-    stencil.Update()
-     
-    outputVolumeNode.SetAndObserveImageData(stencil.GetOutput())
-    # Set the same geometry and parent transform as the input volume
-    ijkToRas = vtk.vtkMatrix4x4()
-    inputVolumeNode.GetIJKToRASMatrix(ijkToRas)
-    outputVolumeNode.SetIJKToRASMatrix(ijkToRas)
-    inputVolumeNode.SetAndObserveTransformNodeID(inputVolumeNode.GetTransformNodeID())
-     
-    # Get masked output as a vtk oriented image and crop
-    cropThreshold = 0
-    img = slicer.modules.segmentations.logic().CreateOrientedImageDataFromVolumeNode(outputVolumeNode) 
-    img.UnRegister(None) 
-    extent=[0,0,0,0,0,0]
-    vtkSegmentationCore.vtkOrientedImageDataResample.CalculateEffectiveExtent(img, extent, cropThreshold) 
-    croppedImg = vtkSegmentationCore.vtkOrientedImageData() 
-    vtkSegmentationCore.vtkOrientedImageDataResample.CopyImage(img, croppedImg, extent) 
-    slicer.modules.segmentations.logic().CopyOrientedImageDataToVolumeNode(croppedImg, outputVolumeNode)
-    
-    # Use ITK to apply pad to image
-    itkImage = sitkUtils.PullVolumeFromSlicer(outputVolumeNode) 
-    padFilter = sitk.ConstantPadImageFilter()# apply pad
-    padFilter.SetPadUpperBound(padRegion)
-    padFilter.SetPadLowerBound(padRegion)
-    padFilter.SetConstant(padValue)
-    paddedImage = padFilter.Execute(itkImage)
-    sitkUtils.PushVolumeToSlicer(paddedImage,outputVolumeNode)
-    
-    slicer.mrmlScene.RemoveNode(maskedVolume.GetDisplayNode().GetColorNode())
-    slicer.mrmlScene.RemoveNode(maskedVolume.GetDisplayNode())
-    slicer.mrmlScene.RemoveNode(maskedVolume)
-    return True
