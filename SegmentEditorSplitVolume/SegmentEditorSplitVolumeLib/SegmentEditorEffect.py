@@ -151,7 +151,7 @@ Generated volumes are not effected by segmentation undo operation.
       segmentIDs.InsertNextValue(segmentID)
       
       # Create volume for output
-      outputVolumeName = inputVolume.GetName() + '_' + segmentID
+      outputVolumeName = inputVolume.GetName() + ' ' + segmentationNode.GetSegmentation().GetSegment(segmentID).GetName()
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
       
       # Crop segment
