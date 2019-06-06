@@ -348,9 +348,10 @@ modifiable.
     qt.QApplication.restoreOverrideCursor()
 
   @staticmethod
-  def maskVolumeWithSegment(self, segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode):
+  def maskVolumeWithSegment(self, segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode, maskExtent=None):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
+    maskExtent: optional output to return computed mask extent (expected input is a 6-element list)
     """
 
     segmentIDs = vtk.vtkStringArray()
@@ -367,11 +368,18 @@ modifiable.
       slicer.mrmlScene.RemoveNode(maskVolumeNode)
       return False
 
+    if maskExtent:
+      img = slicer.modules.segmentations.logic().CreateOrientedImageDataFromVolumeNode(maskVolumeNode) 
+      img.UnRegister(None)
+      import vtkSegmentationCorePython as vtkSegmentationCore
+      vtkSegmentationCore.vtkOrientedImageDataResample.CalculateEffectiveExtent(img, maskExtent, 0)
+
     maskToStencil = vtk.vtkImageToImageStencil()
     maskToStencil.ThresholdByLower(0)
     maskToStencil.SetInputData(maskVolumeNode.GetImageData())
 
     stencil = vtk.vtkImageStencil()
+    maskExtent
 
     if operationMode == "FILL_INSIDE_AND_OUTSIDE":
       # Set input to constant value
