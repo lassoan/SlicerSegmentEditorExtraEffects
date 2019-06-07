@@ -178,7 +178,8 @@ modifiable.
     self.fillValueEdit.setValue(float(self.scriptedEffect.parameter("FillValue")))
     self.binaryMaskFillOutsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueOutside")))
     self.binaryMaskFillInsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueInside")))
-    operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value == self.scriptedEffect.parameter("Operation")][0]
+    operationName = self.scriptedEffect.parameter("Operation")
+    operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
     operationButton.setChecked(True)
 
     inputVisible = self.scriptedEffect.parameter("InputVisibility")
@@ -344,11 +345,11 @@ modifiable.
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
 
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-    self.maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolume, outputVolume)
+    SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolume, outputVolume)
     qt.QApplication.restoreOverrideCursor()
 
   @staticmethod
-  def maskVolumeWithSegment(self, segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode, maskExtent=None):
+  def maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode, maskExtent=None):
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
     maskExtent: optional output to return computed mask extent (expected input is a 6-element list)

@@ -19,9 +19,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
  
-    #Effect-specific members
-    self.buttonToOperationNameMap = {}
-
   def clone(self):
     # It should not be necessary to modify this method
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -38,9 +35,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
  
   def helpText(self):
     return """Create a volume node for each segment, cropped to the segment extent.\n
-Extent is expanded by the specified number of padding voxels along each axis.
-Voxels outside the segment are set to the requested fill value.
-Generated volumes are not effected by segmentation undo operation.
+Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
+Generated volumes are not affected by segmentation undo/redo operations.
 </html>"""
 
   def setMRMLDefaults(self):
@@ -156,7 +152,7 @@ Generated volumes are not effected by segmentation undo operation.
       
       # Crop segment
       maskExtent = [0] * 6
-      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(self, segmentationNode, segmentID, "FILL_OUTSIDE", [0], inputVolume, outputVolume, maskExtent)
+      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [0], inputVolume, outputVolume, maskExtent)
       
       # Calculate padded extent of segment
       extent = [0] * 6

@@ -155,8 +155,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       self.editButton.setVisible(segment.HasTag("SurfaceCutEffectMarkupPositions"))
 
-    operationButton = [key for key, value in self.buttonToOperationNameMap.iteritems() if value ==
-                       self.scriptedEffect.parameter("Operation")][0]
+    operationName = self.scriptedEffect.parameter("Operation")
+    operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
     operationButton.setChecked(True)
 
   #
@@ -224,7 +224,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # convert from 1D array (N*3) to 2D array (N,3)
     fPosNum = int(len(fPos)/3)
     fPos = fPos.reshape((fPosNum, 3))
-    for i in xrange(fPosNum):
+    for i in range(fPosNum):
       self.segmentMarkupNode.AddFiducialFromArray(fPos[i])
 
     self.editButton.setEnabled(False)
@@ -473,7 +473,7 @@ class SurfaceCutLogic(object):
       import numpy
       n = segmentMarkupNode.GetNumberOfFiducials()
       fPos = []
-      for i in xrange(n):
+      for i in range(n):
         coord = [0.0, 0.0, 0.0]
         segmentMarkupNode.GetNthFiducialPosition(i, coord)
         fPos.extend(coord)

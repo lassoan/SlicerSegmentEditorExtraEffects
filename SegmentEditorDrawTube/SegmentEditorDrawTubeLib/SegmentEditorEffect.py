@@ -159,7 +159,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return slicer.util.mainWindow().cursor
 
   def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault("Interpolation", "MOVING_POLYNOMIAL")
+    self.scriptedEffect.setParameterDefault("Interpolation", "CARDINAL_SPLINE")
     self.scriptedEffect.setParameterDefault("NumberOfLineSegmentsBetweenControlPoints", 15) 
 
   def updateGUIFromMRML(self):
@@ -173,8 +173,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       self.editButton.setVisible(segment.HasTag("DrawTubeEffectMarkupPositions"))
 
-    interpolationButton = [key for key, value in self.buttonToInterpolationTypeMap.iteritems() if value ==
-                       self.scriptedEffect.parameter("Interpolation")][0]
+    interpolationName = self.scriptedEffect.parameter("Interpolation")
+    interpolationButton = list(self.buttonToInterpolationTypeMap.keys())[list(self.buttonToInterpolationTypeMap.values()).index(interpolationName)]
     interpolationButton.setChecked(True)
 
     self.numberOfLineSegmentsSpinBox.value = self.scriptedEffect.integerParameter("NumberOfLineSegmentsBetweenControlPoints")
@@ -253,7 +253,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # convert from 1D array (N*3) to 2D array (N,3)
     fPosNum = int(len(fPos)/3)
     fPos = fPos.reshape((fPosNum, 3))
-    for i in xrange(fPosNum):
+    for i in range(fPosNum):
       self.segmentMarkupNode.AddFiducialFromArray(fPos[i])
 
     self.editButton.setEnabled(False)
@@ -512,7 +512,7 @@ class DrawTubeLogic(object):
       import numpy
       n = segmentMarkupNode.GetNumberOfFiducials()
       fPos = []
-      for i in xrange(n):
+      for i in range(n):
         coord = [0.0, 0.0, 0.0]
         segmentMarkupNode.GetNthFiducialPosition(i, coord)
         fPos.extend(coord)
