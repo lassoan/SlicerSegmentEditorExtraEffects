@@ -371,12 +371,18 @@ class SurfaceCutLogic(object):
 
       modelDisplayNode.SetColor(r, g, b)  # Edited segment color
       modelDisplayNode.BackfaceCullingOff()
-      modelDisplayNode.SliceIntersectionVisibilityOn()
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        modelDisplayNode.Visibility2DOn()
+      else:
+        modelDisplayNode.SliceIntersectionVisibilityOn()
       modelDisplayNode.SetSliceIntersectionThickness(4)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-      outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        outputModel.GetDisplayNode().Visibility2DOn()
+      else:
+        outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
     markupsToModel = slicer.modules.markupstomodel.logic()
     markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True)  # create smooth surface from points
