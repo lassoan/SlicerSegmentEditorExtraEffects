@@ -62,7 +62,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     fiducialActionLayout.addWidget(self.fiducialPlacementToggle)
     fiducialActionLayout.addWidget(self.editButton)
     self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialActionLayout)
-    
+
     # Radius spinbox
     self.radiusSpinBox = slicer.qMRMLSpinBox()
     self.radiusSpinBox.value = self.logic.radius
@@ -98,7 +98,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Default value should work for most cases and modules can programmatically change this value, if needed.
     # If user feedback confirms that this parameter must be exposed then the next line can be uncommented.
     # self.scriptedEffect.addLabeledOptionsWidget("Segments between points: ", self.numberOfLineSegmentsSpinBox)
-    
+
     # Interpolation buttons layout
     interpolationLayout = qt.QGridLayout()
     interpolationLayout.addWidget(self.piecewiseLinearButton, 0, 0)
@@ -160,7 +160,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("Interpolation", "CARDINAL_SPLINE")
-    self.scriptedEffect.setParameterDefault("NumberOfLineSegmentsBetweenControlPoints", 15) 
+    self.scriptedEffect.setParameterDefault("NumberOfLineSegmentsBetweenControlPoints", 15)
 
   def updateGUIFromMRML(self):
     if self.segmentMarkupNode:
@@ -208,7 +208,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onNumberOfLineSegmentsChanged(self, numberOfLineSegments):
     self.scriptedEffect.setParameter("NumberOfLineSegmentsBetweenControlPoints", numberOfLineSegments)
     self.updateModelFromSegmentMarkupNode()
-    
+
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
       self.reset()
@@ -401,12 +401,18 @@ class DrawTubeLogic(object):
 
       modelDisplayNode.SetColor(r, g, b)  # Edited segment color
       modelDisplayNode.BackfaceCullingOff()
-      modelDisplayNode.SliceIntersectionVisibilityOn()
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        modelDisplayNode.Visibility2DOn()
+      else:
+        modelDisplayNode.SliceIntersectionVisibilityOn()
       modelDisplayNode.SetSliceIntersectionThickness(2)
       modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
       outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-      outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        outputModel.GetDisplayNode().Visibility2DOn()
+      else:
+        outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
     interpolationName = self.scriptedEffect.parameter("Interpolation")
     polynomialFitType = slicer.vtkMRMLMarkupsToModelNode.MovingLeastSquares
@@ -422,8 +428,8 @@ class DrawTubeLogic(object):
     elif interpolationName == "MOVING_POLYNOMIAL":
       interpolationType = slicer.vtkMRMLMarkupsToModelNode.Polynomial
       polynomialFitType = slicer.vtkMRMLMarkupsToModelNode.MovingLeastSquares
-      
-    NumberOfLineSegmentsBetweenControlPoints = self.scriptedEffect.integerParameter("NumberOfLineSegmentsBetweenControlPoints") 
+
+    NumberOfLineSegmentsBetweenControlPoints = self.scriptedEffect.integerParameter("NumberOfLineSegmentsBetweenControlPoints")
 
     markupsToModel = slicer.modules.markupstomodel.logic()
     # Create tube from points
