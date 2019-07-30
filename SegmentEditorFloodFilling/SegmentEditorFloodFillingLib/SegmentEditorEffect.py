@@ -28,6 +28,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def helpText(self):
     return """Fill connected voxels with similar intensity\n.
 Click in the image to add voxels that have similar intensity to the clicked voxel.
+Masking settings can be used to restrict growing to a specific region.
 """
 
   def activate(self):
@@ -48,7 +49,7 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
     self.neighborhoodSizeMmSlider = ctk.ctkSliderWidget()
     self.neighborhoodSizeMmSlider.setToolTip("Regions are added only if all voxels in the neighborhood have similar intensities."
       "Use higher values prevent leakage. Use lower values to allow capturing finer details.")
-    self.neighborhoodSizeMmSlider.minimum = 0.01
+    self.neighborhoodSizeMmSlider.minimum = 0.0
     self.neighborhoodSizeMmSlider.maximum = 30.0
     self.neighborhoodSizeMmSlider.value = 1.0
     self.neighborhoodSizeMmSlider.singleStep = 0.01
@@ -94,7 +95,6 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
 
     # Size slider
     minSpacing = min(masterImageData.GetSpacing())
-    self.neighborhoodSizeMmSlider.minimum = 10**(math.floor(math.log(minSpacing/10.0)/math.log(10)))
     self.neighborhoodSizeMmSlider.maximum = 10**(math.ceil(math.log(minSpacing*100.0)/math.log(10)))
     self.neighborhoodSizeMmSlider.singleStep = self.neighborhoodSizeMmSlider.minimum
     self.neighborhoodSizeMmSlider.pageStep = self.neighborhoodSizeMmSlider.singleStep*10
@@ -146,13 +146,32 @@ Click in the image to add voxels that have similar intensity to the clicked voxe
         qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
         # Perform thresholding
-        floodFillingFilter = vtk.vtkImageThresholdConnectivity()       
+        floodFillingFilter = vtk.vtkImageThresholdConnectivity()
         floodFillingFilter.SetInputData(masterImageData)
         seedPoints = vtk.vtkPoints()
         origin = masterImageData.GetOrigin()
         spacing = masterImageData.GetSpacing()
         seedPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
         floodFillingFilter.SetSeedPoints(seedPoints)
+
+        maskImageData = vtkSegmentationCore.vtkOrientedImageData()
+        intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMask()
+        segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+        success = segmentationNode.GenerateEditMask(maskImageData,
+          self.scriptedEffect.parameterSetNode().GetMaskMode(),
+          masterImageData, # reference geometry
+          self.scriptedEffect.parameterSetNode().GetSelectedSegmentID(),
+          self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
+          masterImageData if intensityBasedMasking else None,
+          self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
+        if success:
+          stencil = vtk.vtkImageToImageStencil()
+          stencil.SetInputData(maskImageData)
+          stencil.ThresholdByLower(0)
+          stencil.Update()
+          floodFillingFilter.SetStencilData(stencil.GetOutput())
+        else:
+          logging.error("Failed to create edit mask")
         
         neighborhoodSizeMm = self.neighborhoodSizeMmSlider.value
         floodFillingFilter.SetNeighborhoodRadius(neighborhoodSizeMm,neighborhoodSizeMm,neighborhoodSizeMm)
