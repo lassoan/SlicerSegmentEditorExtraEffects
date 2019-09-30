@@ -144,6 +144,11 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
       masterImageDataShort.CopyDirections(masterImageData) # Copy geometry
       masterImageData = masterImageDataShort
 
+    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+      if not self.originalSelectedSegmentLabelmap:
+        segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+        segmentationNode.GetSegmentation().SeparateSegmentLabelmap(self.scriptedEffect.parameterSetNode().GetSelectedSegmentID())
+
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
     
     if not self.originalSelectedSegmentLabelmap:
@@ -264,7 +269,11 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     # Apply changes
     import vtkSegmentationCorePython as vtkSegmentationCore
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    modifierLabelmap = segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId)
+    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+      modifierLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+      segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId, modifierLabelmap)
+    else:
+      modifierLabelmap = segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId)
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
     self.originalSelectedSegmentLabelmap = None
 
