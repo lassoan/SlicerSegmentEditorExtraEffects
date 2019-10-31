@@ -122,6 +122,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
+    # Create model node prior to markup node to display markups over the model
+    if not self.segmentModel:
+      self.createNewModelNode()
     # Create empty markup fiducial node
     if not self.segmentMarkupNode:
       self.createNewMarkupNode()
@@ -172,8 +175,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.fiducialPlacementToggle.placeButton().isChecked():
       # Create empty model node
       if self.segmentModel is None:
-        self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        self.segmentModel.SetName("SegmentEditorSurfaceCutModel")
+        self.createNewModelNode()
 
       # Create empty markup fiducial node
       if self.segmentMarkupNode is None:
@@ -183,6 +185,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
       self.reset()
+      # Create model node prior to markup node for display order
+      self.createNewModelNode()
       self.createNewMarkupNode()
       self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     else:
@@ -203,14 +207,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onCancel(self):
     self.reset()
+    # Create model node prior to markup node for display order
+    self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
 
   def onEdit(self):
     # Create empty model node
     if self.segmentModel is None:
-      self.segmentModel = slicer.vtkMRMLModelNode()
-      slicer.mrmlScene.AddNode(self.segmentModel)
+      self.createNewModelNode()
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -255,6 +260,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.observeSegmentation(False)
     self.logic.cutSurfaceWithModel(self.segmentMarkupNode, self.segmentModel)
     self.reset()
+    # Create model node prior to markup node for display order
+    self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     self.observeSegmentation(True)
@@ -275,6 +282,20 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.observedSegmentation = segmentation
       self.segmentObserver = self.observedSegmentation.AddObserver(vtkSegmentationCore.vtkSegmentation.SegmentModified,
                                                                    self.onSegmentModified)
+
+  def createNewModelNode(self):
+    if self.segmentModel is None:
+      self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+      self.segmentModel.SetName("SegmentEditorSurfaceCutModel")
+
+      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
+      self.logic.setUpModelDisplayNode(modelDisplayNode)
+      self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
+
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        self.segmentModel.GetDisplayNode().Visibility2DOn()
+      else:
+        self.segmentModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -355,35 +376,25 @@ class SurfaceCutLogic(object):
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
 
+  def setUpModelDisplayNode(self, modelDisplayNode):
+    # Get color of edited segment
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+
+    modelDisplayNode.SetColor(r, g, b)  # Edited segment color
+    modelDisplayNode.BackfaceCullingOff()
+    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+      modelDisplayNode.Visibility2DOn()
+    else:
+      modelDisplayNode.SliceIntersectionVisibilityOn()
+    modelDisplayNode.SetSliceIntersectionThickness(4)
+    modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
+
   def updateModelFromMarkup(self, inputMarkup, outputModel):
     """
     Update model to enclose all points in the input markup list
     """
-
-    # Create default model display node if does not exist yet
-    if not outputModel.GetDisplayNode():
-      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
-
-      # Get color of edited segment
-      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-      r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-
-      modelDisplayNode.SetColor(r, g, b)  # Edited segment color
-      modelDisplayNode.BackfaceCullingOff()
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        modelDisplayNode.Visibility2DOn()
-      else:
-        modelDisplayNode.SliceIntersectionVisibilityOn()
-      modelDisplayNode.SetSliceIntersectionThickness(4)
-      modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
-      outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
-
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        outputModel.GetDisplayNode().Visibility2DOn()
-      else:
-        outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
-
     markupsToModel = slicer.modules.markupstomodel.logic()
     markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True)  # create smooth surface from points
 
