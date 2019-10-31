@@ -23,8 +23,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.segmentObserver = None
     self.buttonToInterpolationTypeMap = {}
 
-    self.displayMarkupOverModel = True
-
   def clone(self):
     # It should not be necessary to modify this method
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -141,7 +139,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
-    if not self.displayMarkupOverModel:
+    # Create model node prior to markup node to display markups over the model
+    if not self.segmentModel:
       self.createNewModelNode()
     # Create empty markup fiducial node
     if not self.segmentMarkupNode:
@@ -195,22 +194,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onFiducialPlacementToggleChanged(self):
     if self.fiducialPlacementToggle.placeButton().isChecked():
-      if self.displayMarkupOverModel:
-        # Create empty model node
-        if self.segmentModel is None:
-          self.createNewModelNode()
+      # Create empty model node
+      if self.segmentModel is None:
+        self.createNewModelNode()
 
-        # Create empty markup fiducial node
-        if self.segmentMarkupNode is None:
-          self.createNewMarkupNode()
-          self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
-      else:
-        if self.segmentMarkupNode is None:
-          self.createNewMarkupNode()
-          self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
-
-        if self.segmentModel is None:
-          self.createNewModelNode()
+      # Create empty markup fiducial node
+      if self.segmentMarkupNode is None:
+        self.createNewMarkupNode()
+        self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
 
   def onRadiusChanged(self, radius):
     self.logic.radius = radius
@@ -223,8 +214,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
       self.reset()
-      if not self.displayMarkupOverModel:
-        self.createNewModelNode()
+      # Create model node prior to markup node for display order
+      self.createNewModelNode()
       self.createNewMarkupNode()
       self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     else:
@@ -245,8 +236,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onCancel(self):
     self.reset()
-    if not self.displayMarkupOverModel:
-      self.createNewModelNode()
+    # Create model node prior to markup node for display order
+    self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
 
@@ -297,8 +288,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.observeSegmentation(False)
     self.logic.cutSurfaceWithModel(self.segmentMarkupNode, self.segmentModel)
     self.reset()
-    if not self.displayMarkupOverModel:
-      self.createNewModelNode()
+    # Create model node prior to markup node for display order
+    self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     self.observeSegmentation(True)
@@ -407,14 +398,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
-
-  def toggleDisplayOrder(self):
-    """
-    Toggles the order the model node and markup node are added to
-    the scene to change display order. Default behavior is for the
-    model to be added last and displayed on top of the markups.
-    """
-    self.displayMarkupOverModel = not self.displayMarkupOverModel
 
 class DrawTubeLogic(object):
 
