@@ -23,6 +23,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.segmentObserver = None
     self.buttonToInterpolationTypeMap = {}
 
+    self.displayMarkupOverModel = True
+
   def clone(self):
     # It should not be necessary to modify this method
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -139,6 +141,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
+    if not self.displayMarkupOverModel:
+      self.createNewModelNode()
     # Create empty markup fiducial node
     if not self.segmentMarkupNode:
       self.createNewMarkupNode()
@@ -191,15 +195,22 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onFiducialPlacementToggleChanged(self):
     if self.fiducialPlacementToggle.placeButton().isChecked():
-      # Create empty model node
-      if self.segmentModel is None:
-        self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-        self.segmentModel.SetName("SegmentEditorDrawTubeModel")
+      if self.displayMarkupOverModel:
+        # Create empty model node
+        if self.segmentModel is None:
+          self.createNewModelNode()
 
-      # Create empty markup fiducial node
-      if self.segmentMarkupNode is None:
-        self.createNewMarkupNode()
-        self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+        # Create empty markup fiducial node
+        if self.segmentMarkupNode is None:
+          self.createNewMarkupNode()
+          self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+      else:
+        if self.segmentMarkupNode is None:
+          self.createNewMarkupNode()
+          self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+
+        if self.segmentModel is None:
+          self.createNewModelNode()
 
   def onRadiusChanged(self, radius):
     self.logic.radius = radius
@@ -212,6 +223,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
       self.reset()
+      if not self.displayMarkupOverModel:
+        self.createNewModelNode()
       self.createNewMarkupNode()
       self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     else:
@@ -232,14 +245,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onCancel(self):
     self.reset()
+    if not self.displayMarkupOverModel:
+      self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
 
   def onEdit(self):
     # Create empty model node
     if self.segmentModel is None:
-      self.segmentModel = slicer.vtkMRMLModelNode()
-      slicer.mrmlScene.AddNode(self.segmentModel)
+      self.createNewModelNode()
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -283,6 +297,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.observeSegmentation(False)
     self.logic.cutSurfaceWithModel(self.segmentMarkupNode, self.segmentModel)
     self.reset()
+    if not self.displayMarkupOverModel:
+      self.createNewModelNode()
     self.createNewMarkupNode()
     self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     self.observeSegmentation(True)
@@ -303,6 +319,20 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.observedSegmentation = segmentation
       self.segmentObserver = self.observedSegmentation.AddObserver(vtkSegmentationCore.vtkSegmentation.SegmentModified,
                                                                    self.onSegmentModified)
+
+  def createNewModelNode(self):
+    if self.segmentModel is None:
+      self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
+      self.segmentModel.SetName("SegmentEditorDrawTubeModel")
+
+      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
+      self.logic.setUpModelDisplayNode(modelDisplayNode)
+      self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
+
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        self.segmentModel.GetDisplayNode().Visibility2DOn()
+      else:
+        self.segmentModel.GetDisplayNode().SliceIntersectionVisibilityOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -378,6 +408,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
 
+  def toggleDisplayOrder(self):
+    """
+    Toggles the order the model node and markup node are added to
+    the scene to change display order. Default behavior is for the
+    model to be added last and displayed on top of the markups.
+    """
+    self.displayMarkupOverModel = not self.displayMarkupOverModel
+
 class DrawTubeLogic(object):
 
   def __init__(self, scriptedEffect):
@@ -385,35 +423,25 @@ class DrawTubeLogic(object):
     self.radius = 1.0
     self.curveGenerator = slicer.vtkCurveGenerator()
 
+  def setUpModelDisplayNode(self, modelDisplayNode):
+    # Get color of edited segment
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+
+    modelDisplayNode.SetColor(r, g, b)  # Edited segment color
+    modelDisplayNode.BackfaceCullingOff()
+    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+      modelDisplayNode.Visibility2DOn()
+    else:
+      modelDisplayNode.SliceIntersectionVisibilityOn()
+    modelDisplayNode.SetSliceIntersectionThickness(2)
+    modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
+
   def updateModelFromMarkup(self, inputMarkup, outputModel):
     """
     Update model to enclose all points in the input markup list
     """
-
-    # Create default model display node if does not exist yet
-    if not outputModel.GetDisplayNode():
-      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
-
-      # Get color of edited segment
-      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-      r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-
-      modelDisplayNode.SetColor(r, g, b)  # Edited segment color
-      modelDisplayNode.BackfaceCullingOff()
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        modelDisplayNode.Visibility2DOn()
-      else:
-        modelDisplayNode.SliceIntersectionVisibilityOn()
-      modelDisplayNode.SetSliceIntersectionThickness(2)
-      modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
-      outputModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
-
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        outputModel.GetDisplayNode().Visibility2DOn()
-      else:
-        outputModel.GetDisplayNode().SliceIntersectionVisibilityOn()
-
     interpolationName = self.scriptedEffect.parameter("Interpolation")
     polynomialFitType = slicer.vtkMRMLMarkupsToModelNode.MovingLeastSquares
     if interpolationName == "LINEAR":
