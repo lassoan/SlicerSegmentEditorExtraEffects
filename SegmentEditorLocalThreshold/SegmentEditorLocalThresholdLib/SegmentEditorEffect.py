@@ -144,6 +144,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     # Add ROI options
     self.roiSelector = slicer.qMRMLNodeComboBox()
     self.roiSelector.nodeTypes = ['vtkMRMLAnnotationROINode']
+    self.roiSelector.noneEnabled = True
     self.roiSelector.setMRMLScene(slicer.mrmlScene)
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
 
