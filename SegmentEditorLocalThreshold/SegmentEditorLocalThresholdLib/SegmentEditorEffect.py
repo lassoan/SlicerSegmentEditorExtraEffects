@@ -144,6 +144,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     # Add ROI options
     self.roiSelector = slicer.qMRMLNodeComboBox()
     self.roiSelector.nodeTypes = ['vtkMRMLAnnotationROINode']
+    self.roiSelector.noneEnabled = True
     self.roiSelector.setMRMLScene(slicer.mrmlScene)
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
 
@@ -203,10 +204,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
       xy = callerInteractor.GetEventPosition()
       ijk = self.xyToIjk(xy, viewWidget, masterImageData)
 
-      ijkPoints = vtk.vtkPoints() # TODO: Could get points from all of preview
-      origin = masterImageData.GetOrigin()
-      spacing = masterImageData.GetSpacing()
-      ijkPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
+      ijkPoints = vtk.vtkPoints()
+      ijkPoints.InsertNextPoint(ijk[0], ijk[1], ijk[2])
       self.apply(ijkPoints)
 
     return abortEvent
@@ -334,17 +333,17 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if roiNode is not None:
       worldToImageMatrix = vtk.vtkMatrix4x4()
       masterImageData.GetWorldToImageMatrix(worldToImageMatrix)
-    
+
       bounds = [0,0,0,0,0,0]
       roiNode.GetRASBounds(bounds)
       corner1RAS = [bounds[0], bounds[2], bounds[4], 1]
       corner1IJK = [0, 0, 0, 0]
       worldToImageMatrix.MultiplyPoint(corner1RAS, corner1IJK)
-    
+
       corner2RAS = [bounds[1], bounds[3], bounds[5], 1]
       corner2IJK = [0, 0, 0, 0]
       worldToImageMatrix.MultiplyPoint(corner2RAS, corner2IJK)
-    
+
       extent = [0, -1, 0, -1, 0, -1]
       for i in range(3):
           lowerPoint = min(corner1IJK[i], corner2IJK[i])
@@ -399,9 +398,26 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.islandThreshold.SetOutputScalarTypeToUnsignedChar()
     self.islandThreshold.Update()
 
+    # Points may be outside the region after it is eroded.
+    # Snap the points to LABEL_VALUE voxels,
+    snappedIJKPoints = self.snapIJKPointsToLabel(ijkPoints, self.islandThreshold.GetOutput())
+    if snappedIJKPoints.GetNumberOfPoints() == 0:
+      return
+
+    # Convert points to real data coordinates. Required for vtkImageThresholdConnectivity.
+    seedPoints = vtk.vtkPoints()
+    origin = masterImageData.GetOrigin()
+    spacing = masterImageData.GetSpacing()
+    for i in range(snappedIJKPoints.GetNumberOfPoints()):
+      ijkPoint = snappedIJKPoints.GetPoint(i)
+      seedPoints.InsertNextPoint(
+        origin[0]+ijkPoint[0]*spacing[0],
+        origin[1]+ijkPoint[1]*spacing[1],
+        origin[2]+ijkPoint[2]*spacing[2])
+
     segmentationAlgorithm = self.scriptedEffect.parameter(SEGMENTATION_ALGORITHM_PARAMETER_NAME)
     if segmentationAlgorithm == SEGMENTATION_ALGORITHM_MASKING:
-      self.runMasking(ijkPoints, self.islandThreshold.GetOutput(), modifierLabelmap)
+      self.runMasking(seedPoints, self.islandThreshold.GetOutput(), modifierLabelmap)
 
     else:
       self.floodFillingFilterIsland = vtk.vtkImageThresholdConnectivity()
@@ -410,7 +426,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
       self.floodFillingFilterIsland.ReplaceInOn()
       self.floodFillingFilterIsland.ReplaceOutOff()
       self.floodFillingFilterIsland.ThresholdBetween(LABEL_VALUE, LABEL_VALUE)
-      self.floodFillingFilterIsland.SetSeedPoints(ijkPoints)
+      self.floodFillingFilterIsland.SetSeedPoints(seedPoints)
       self.floodFillingFilterIsland.Update()
 
       self.maskCast = vtk.vtkImageCast()
@@ -455,6 +471,47 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
     parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
+
+  def snapIJKPointsToLabel(self, ijkPoints, labelmap):
+    import math
+    snapIJKPoints = vtk.vtkPoints()
+    kernelSize = self.getKernelSizePixel()
+    kernelOffset = [0,0,0]
+    labelmapExtent = labelmap.GetExtent()
+    for i in range(len(kernelOffset)):
+      kernelOffset[i] = int(math.ceil(kernelSize[i]-1)/2)
+    for pointIndex in range(ijkPoints.GetNumberOfPoints()):
+      point = ijkPoints.GetPoint(pointIndex)
+      closestDistance = vtk.VTK_INT_MAX
+      closestPoint = None
+      # Try to find the closest point to the original within the kernel
+      # If more IJK points are used in the future, this could be made faster
+      for kOffset in range(-kernelOffset[2], kernelOffset[2]+1):
+        k = int(point[2] + kOffset)
+        for jOffset in range(-kernelOffset[1], kernelOffset[1]+1):
+          j = int(point[1] + jOffset)
+          for iOffset in range(-kernelOffset[0], kernelOffset[0]+1):
+            i = int(point[0] + iOffset)
+
+            if (labelmapExtent[0] > i or labelmapExtent[1] < i or
+                labelmapExtent[2] > j or labelmapExtent[3] < j or
+                labelmapExtent[4] > k or labelmapExtent[5] < k):
+              continue # Voxel not in image
+            value = labelmap.GetScalarComponentAsFloat(i, j, k, 0)
+            if value <= 0:
+              continue # Label is empty
+
+            offsetPoint = [i, j, k]
+            distance = vtk.vtkMath.Distance2BetweenPoints(point, offsetPoint)
+            if distance >= closestDistance:
+              continue
+            closestPoint = offsetPoint
+            closestDistance = distance
+      if closestPoint is None:
+        continue
+      snapIJKPoints.InsertNextPoint(closestPoint[0], closestPoint[1], closestPoint[2])
+    return snapIJKPoints
+
 
   def getKernelSizePixel(self):
     selectedSegmentLabelmapSpacing = [1.0, 1.0, 1.0]

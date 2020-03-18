@@ -167,8 +167,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def updateGUIFromMRML(self):
     if self.segmentMarkupNode:
-      self.cancelButton.setEnabled(self.segmentMarkupNode.GetNumberOfFiducials() is not 0)
-      self.applyButton.setEnabled(self.segmentMarkupNode.GetNumberOfFiducials() >= 3)
+      self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() is not 0)
+      self.applyButton.setEnabled(self.getNumberOfDefinedControlPoints() >= 3)
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -280,6 +280,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.setAndObserveSegmentMarkupNode(None)
 
   def onApply(self):
+    if self.getNumberOfDefinedControlPoints() < 3:
+      logging.warning("Cannot apply, segment markup node has less than 3 control points")
+      return
+
     # Allow users revert to this state by clicking Undo
     self.scriptedEffect.saveStateForUndo()
 
@@ -398,6 +402,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
+
+  def getNumberOfDefinedControlPoints(self):
+    count = 0
+    if self.segmentMarkupNode:
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
+      else:
+        count = self.segmentMarkupNode.GetNumberOfFiducials()
+    return count
 
 class DrawTubeLogic(object):
 
