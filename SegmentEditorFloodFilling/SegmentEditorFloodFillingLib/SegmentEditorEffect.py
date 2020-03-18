@@ -63,7 +63,7 @@ Masking settings can be used to restrict growing to a specific region.
     # Turn off effect-specific cursor for this effect
     #return slicer.util.mainWindow().cursor
     return qt.QCursor(qt.Qt.PointingHandCursor)
-    
+
   def masterVolumeNodeChanged(self):
     # Set scalar range of master volume image data to threshold slider
     import math
@@ -74,13 +74,13 @@ Masking settings can be used to restrict growing to a specific region.
 
     # TODO: it might be useful to add a convenience function, which determines size and intensity min/max/step/decimals
     # based on the selected master volume's size, spacing, and intensity range
-    
+
     # Intensity slider
     lo, hi = masterImageData.GetScalarRange()
     if (hi-lo > 0):
       range = hi-lo
       stepSize = 1
-      
+
       # For floating-point volume: step size is 1/1000th of range (but maximum 1)
       if masterImageData.GetScalarType() == vtk.VTK_FLOAT or masterImageData.GetScalarType() == vtk.VTK_DOUBLE:
         stepSize = 10**(math.floor(math.log(range/1000.0)/math.log(10)))
@@ -123,82 +123,86 @@ Masking settings can be used to restrict growing to a specific region.
       return abortEvent
 
     if eventId == vtk.vtkCommand.LeftButtonPressEvent:
-      self.scriptedEffect.saveStateForUndo()
-
-      # Get master volume image data
-      import vtkSegmentationCorePython as vtkSegmentationCore
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
-      selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-
-      # Get modifier labelmap
-      modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
-
-      xy = callerInteractor.GetEventPosition()
-      ijk = self.xyToIjk(xy, viewWidget, masterImageData)
-
-      pixelValue = masterImageData.GetScalarComponentAsFloat(ijk[0], ijk[1], ijk[2], 0)      
-      
-      useSegmentationAsStencil = False
-      
+      # This can be a long operation - indicate it to the user
+      qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
       try:
-
-        # This can be a long operation - indicate it to the user
-        qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-
-        # Perform thresholding
-        floodFillingFilter = vtk.vtkImageThresholdConnectivity()
-        floodFillingFilter.SetInputData(masterImageData)
-        seedPoints = vtk.vtkPoints()
-        origin = masterImageData.GetOrigin()
-        spacing = masterImageData.GetSpacing()
-        seedPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
-        floodFillingFilter.SetSeedPoints(seedPoints)
-
-        maskImageData = vtkSegmentationCore.vtkOrientedImageData()
-        intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMask()
-        segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-        success = segmentationNode.GenerateEditMask(maskImageData,
-          self.scriptedEffect.parameterSetNode().GetMaskMode(),
-          masterImageData, # reference geometry
-          self.scriptedEffect.parameterSetNode().GetSelectedSegmentID(),
-          self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-          masterImageData if intensityBasedMasking else None,
-          self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
-        if success:
-          stencil = vtk.vtkImageToImageStencil()
-          stencil.SetInputData(maskImageData)
-          stencil.ThresholdByLower(0)
-          stencil.Update()
-          floodFillingFilter.SetStencilData(stencil.GetOutput())
-        else:
-          logging.error("Failed to create edit mask")
-        
-        neighborhoodSizeMm = self.neighborhoodSizeMmSlider.value
-        floodFillingFilter.SetNeighborhoodRadius(neighborhoodSizeMm,neighborhoodSizeMm,neighborhoodSizeMm)
-        floodFillingFilter.SetNeighborhoodFraction(0.5)
-        
-        if useSegmentationAsStencil:
-          stencilFilter = vtk.vtkImageToImageStencil()
-          stencilFilter.SetInputData(selectedSegmentLabelmap)
-          stencilFilter.ThresholdByLower(0)
-          stencilFilter.Update()          
-          floodFillingFilter.SetStencilData(stencilFilter.GetOutput())
-
-        pixelValueTolerance = float(self.intensityToleranceSlider.value)
-        floodFillingFilter.ThresholdBetween(pixelValue-pixelValueTolerance, pixelValue+pixelValueTolerance)
-        
-        floodFillingFilter.SetInValue(1)
-        floodFillingFilter.SetOutValue(0)
-        floodFillingFilter.Update()
-        modifierLabelmap.DeepCopy(floodFillingFilter.GetOutput())
+        xy = callerInteractor.GetEventPosition()
+        import vtkSegmentationCorePython as vtkSegmentationCore
+        masterImageData = self.scriptedEffect.masterVolumeImageData()
+        ijk = self.xyToIjk(xy, viewWidget, masterImageData)
+        self.floodFillFromPoint(ijk)
       except IndexError:
         logging.error('apply: Failed to threshold master volume!')
       finally:
-        qt.QApplication.restoreOverrideCursor() 
-
-      # Apply changes
-      self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
+        qt.QApplication.restoreOverrideCursor()
       abortEvent = True
-        
+
     return abortEvent
-      
+
+  def floodFillFromPoint(self, ijk):
+    """Fills the segment taking based on the current master volume.
+    Input IJK position is voxel coordinates of master volume.
+    """
+    self.scriptedEffect.saveStateForUndo()
+
+    # Get master volume image data
+    import vtkSegmentationCorePython as vtkSegmentationCore
+    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
+
+    # Get modifier labelmap
+    modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
+
+    pixelValue = masterImageData.GetScalarComponentAsFloat(ijk[0], ijk[1], ijk[2], 0)
+
+    useSegmentationAsStencil = False
+
+    # Perform thresholding
+    floodFillingFilter = vtk.vtkImageThresholdConnectivity()
+    floodFillingFilter.SetInputData(masterImageData)
+    seedPoints = vtk.vtkPoints()
+    origin = masterImageData.GetOrigin()
+    spacing = masterImageData.GetSpacing()
+    seedPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
+    floodFillingFilter.SetSeedPoints(seedPoints)
+
+    maskImageData = vtkSegmentationCore.vtkOrientedImageData()
+    intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMask()
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    success = segmentationNode.GenerateEditMask(maskImageData,
+      self.scriptedEffect.parameterSetNode().GetMaskMode(),
+      masterImageData, # reference geometry
+      self.scriptedEffect.parameterSetNode().GetSelectedSegmentID(),
+      self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
+      masterImageData if intensityBasedMasking else None,
+      self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
+    if success:
+      stencil = vtk.vtkImageToImageStencil()
+      stencil.SetInputData(maskImageData)
+      stencil.ThresholdByLower(0)
+      stencil.Update()
+      floodFillingFilter.SetStencilData(stencil.GetOutput())
+    else:
+      logging.error("Failed to create edit mask")
+
+    neighborhoodSizeMm = self.neighborhoodSizeMmSlider.value
+    floodFillingFilter.SetNeighborhoodRadius(neighborhoodSizeMm,neighborhoodSizeMm,neighborhoodSizeMm)
+    floodFillingFilter.SetNeighborhoodFraction(0.5)
+
+    if useSegmentationAsStencil:
+      stencilFilter = vtk.vtkImageToImageStencil()
+      stencilFilter.SetInputData(selectedSegmentLabelmap)
+      stencilFilter.ThresholdByLower(0)
+      stencilFilter.Update()
+      floodFillingFilter.SetStencilData(stencilFilter.GetOutput())
+
+    pixelValueTolerance = float(self.intensityToleranceSlider.value)
+    floodFillingFilter.ThresholdBetween(pixelValue-pixelValueTolerance, pixelValue+pixelValueTolerance)
+
+    floodFillingFilter.SetInValue(1)
+    floodFillingFilter.SetOutValue(0)
+    floodFillingFilter.Update()
+    modifierLabelmap.DeepCopy(floodFillingFilter.GetOutput())
+
+    # Apply changes
+    self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
