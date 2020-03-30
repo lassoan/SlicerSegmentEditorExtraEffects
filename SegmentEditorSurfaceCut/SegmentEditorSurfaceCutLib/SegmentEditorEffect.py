@@ -148,6 +148,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameterDefault("Operation", "SET")
 
   def updateGUIFromMRML(self):
+    if slicer.mrmlScene.IsClosing():
+      return
+
     if self.segmentMarkupNode:
       self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() is not 0)
       self.applyButton.setEnabled(self.getNumberOfDefinedControlPoints() >= 3)
@@ -159,8 +162,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.editButton.setVisible(segment.HasTag("SurfaceCutEffectMarkupPositions"))
 
     operationName = self.scriptedEffect.parameter("Operation")
-    operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
-    operationButton.setChecked(True)
+    if operationName != "":
+      operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
+      operationButton.setChecked(True)
 
   #
   # Effect specific methods (the above ones are the API methods to override)
@@ -243,11 +247,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.editButton.setEnabled(True)
 
     if self.segmentModel:
-      slicer.mrmlScene.RemoveNode(self.segmentModel)
+      if self.segmentModel.GetScene():
+        slicer.mrmlScene.RemoveNode(self.segmentModel)
       self.segmentModel = None
 
     if self.segmentMarkupNode:
-      slicer.mrmlScene.RemoveNode(self.segmentMarkupNode)
+      if self.segmentMarkupNode.GetScene():
+        slicer.mrmlScene.RemoveNode(self.segmentMarkupNode)
       self.setAndObserveSegmentMarkupNode(None)
 
   def onApply(self):
@@ -354,6 +360,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
                                                                           self.onSegmentEditorNodeModified)
 
   def onSegmentEditorNodeModified(self, observer, eventid):
+    if self.scriptedEffect.parameterSetNode() is None:
+      return
+
     # Get color of edited segment
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
