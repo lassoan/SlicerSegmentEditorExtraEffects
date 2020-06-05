@@ -94,6 +94,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
+    # Smooth model checkbox layout
+    smoothModelLayout = qt.QGridLayout()
+    self.smoothModelCheckbox = qt.QCheckBox()
+    self.smoothModelCheckbox.setChecked(True) # model smoothing initial default is True
+    self.smoothModelCheckbox.setToolTip("Model is smoothed if checked, faceted if unchecked")
+    smoothModelLayout.addWidget(self.smoothModelCheckbox, 0, 0)
+    self.scriptedEffect.addLabeledOptionsWidget("Smooth model:", smoothModelLayout)
+    
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
@@ -115,6 +123,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     for button in self.operationRadioButtons:
       button.connect('toggled(bool)',
       lambda toggle, widget=self.buttonToOperationNameMap[button]: self.onOperationSelectionChanged(widget, toggle))
+    self.smoothModelCheckbox.connect('stateChanged(int)', self.onSmoothModelCheckboxStateChanged)
     self.applyButton.connect('clicked()', self.onApply)
     self.cancelButton.connect('clicked()', self.onCancel)
     self.editButton.connect('clicked()', self.onEdit)
@@ -146,7 +155,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("Operation", "SET")
-
+    self.scriptedEffect.setParameterDefault("SmoothModel", "True")
+    
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
       return
@@ -165,6 +175,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if operationName != "":
       operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
       operationButton.setChecked(True)
+    
+    if self.scriptedEffect.parameter("SmoothModel") == 'True':
+      self.smoothModelCheckbox.setChecked(True)
+    elif self.scriptedEffect.parameter('SmoothModel') == 'False':
+      self.smoothModelCheckbox.setChecked(False)
+    else:
+      raise Exception('SmoothModel parameter must be either "True" or "False"')
 
   #
   # Effect specific methods (the above ones are the API methods to override)
@@ -174,6 +191,17 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if not toggle:
       return
     self.scriptedEffect.setParameter("Operation", operationName)
+
+  def onSmoothModelCheckboxStateChanged(self, newState):
+    logging.info('onSmoothModelCheckboxStateChanged, new state is: %s'%(str(newState)))
+    if newState==qt.Qt.Checked:
+      self.scriptedEffect.setParameter("SmoothModel", 'True')
+    elif newState==qt.Qt.Unchecked:
+      self.scriptedEffect.setParameter("SmoothModel", 'False')
+    else:
+      raise Exception('New checked state must be equal either qt.Qt.Checked or qt.Qt.Unchecked!')
+    self.updateModelFromSegmentMarkupNode()
+    self.updateGUIFromMRML()
 
   def onFiducialPlacementToggleChanged(self):
     if self.fiducialPlacementToggle.placeButton().isChecked():
@@ -377,7 +405,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel)
+    smoothModelFlag = self.smoothModelCheckbox.isChecked()
+    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel, smoothModelFlag)
 
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
@@ -412,12 +441,12 @@ class SurfaceCutLogic(object):
     modelDisplayNode.SetSliceIntersectionThickness(4)
     modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
 
-  def updateModelFromMarkup(self, inputMarkup, outputModel):
+  def updateModelFromMarkup(self, inputMarkup, outputModel, smoothModelFlag=True):
     """
     Update model to enclose all points in the input markup list
     """
     markupsToModel = slicer.modules.markupstomodel.logic()
-    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True)  # create smooth surface from points
+    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, smoothModelFlag)  # create surface from points
 
   def cutSurfaceWithModel(self, segmentMarkupNode, segmentModel):
 
