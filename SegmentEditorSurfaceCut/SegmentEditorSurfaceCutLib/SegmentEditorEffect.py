@@ -94,6 +94,12 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
+    # Smooth model checkbox layout
+    self.smoothModelCheckbox = qt.QCheckBox()
+    self.smoothModelCheckbox.setChecked(True) # model smoothing initial default is True
+    self.smoothModelCheckbox.setToolTip("Model is smoothed if checked, faceted if unchecked")
+    self.scriptedEffect.addLabeledOptionsWidget("Smooth model:", self.smoothModelCheckbox)
+
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
@@ -115,6 +121,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     for button in self.operationRadioButtons:
       button.connect('toggled(bool)',
       lambda toggle, widget=self.buttonToOperationNameMap[button]: self.onOperationSelectionChanged(widget, toggle))
+    self.smoothModelCheckbox.connect('stateChanged(int)', self.onSmoothModelCheckboxStateChanged)
     self.applyButton.connect('clicked()', self.onApply)
     self.cancelButton.connect('clicked()', self.onCancel)
     self.editButton.connect('clicked()', self.onEdit)
@@ -146,6 +153,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("Operation", "SET")
+    self.scriptedEffect.setParameterDefault("SmoothModel", 1)
 
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
@@ -166,6 +174,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
       operationButton.setChecked(True)
 
+    self.smoothModelCheckbox.setChecked(
+      self.scriptedEffect.integerParameter("SmoothModel") != 0)
   #
   # Effect specific methods (the above ones are the API methods to override)
   #
@@ -174,6 +184,12 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if not toggle:
       return
     self.scriptedEffect.setParameter("Operation", operationName)
+
+  def onSmoothModelCheckboxStateChanged(self, newState):
+    smoothing = 1 if self.smoothModelCheckbox.isChecked() else 0
+    self.scriptedEffect.setParameter("SmoothModel", smoothing)
+    self.updateModelFromSegmentMarkupNode()
+    self.updateGUIFromMRML()
 
   def onFiducialPlacementToggleChanged(self):
     if self.fiducialPlacementToggle.placeButton().isChecked():
@@ -377,7 +393,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel)
+    smoothing = self.scriptedEffect.integerParameter("SmoothModel") != 0
+    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel, smoothing)
 
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
@@ -412,12 +429,20 @@ class SurfaceCutLogic(object):
     modelDisplayNode.SetSliceIntersectionThickness(4)
     modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
 
-  def updateModelFromMarkup(self, inputMarkup, outputModel):
+  def updateModelFromMarkup(self, inputMarkup, outputModel, smoothModelFlag=True):
     """
     Update model to enclose all points in the input markup list
     """
+    # create surface from points
     markupsToModel = slicer.modules.markupstomodel.logic()
-    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, True)  # create smooth surface from points
+    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, smoothModelFlag)
+    displayNode = outputModel.GetDisplayNode()
+    # Set flat interpolation for nice display of large planar facets
+    if displayNode:
+      if smoothModelFlag:
+        displayNode.SetInterpolation(slicer.vtkMRMLDisplayNode.GouraudInterpolation)
+      else:
+        displayNode.SetInterpolation(slicer.vtkMRMLDisplayNode.FlatInterpolation)
 
   def cutSurfaceWithModel(self, segmentMarkupNode, segmentModel):
 
