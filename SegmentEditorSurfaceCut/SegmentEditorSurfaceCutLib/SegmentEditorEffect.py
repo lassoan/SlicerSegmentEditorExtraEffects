@@ -95,12 +95,12 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
     # Smooth model checkbox layout
-    smoothModelLayout = qt.QGridLayout()
+    #smoothModelLayout = qt.QGridLayout()
     self.smoothModelCheckbox = qt.QCheckBox()
     self.smoothModelCheckbox.setChecked(True) # model smoothing initial default is True
     self.smoothModelCheckbox.setToolTip("Model is smoothed if checked, faceted if unchecked")
-    smoothModelLayout.addWidget(self.smoothModelCheckbox, 0, 0)
-    self.scriptedEffect.addLabeledOptionsWidget("Smooth model:", smoothModelLayout)
+    #smoothModelLayout.addWidget(self.smoothModelCheckbox, 0, 0)
+    self.scriptedEffect.addLabeledOptionsWidget("Smooth model:", self.smoothModelCheckbox)
     
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
@@ -155,7 +155,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("Operation", "SET")
-    self.scriptedEffect.setParameterDefault("SmoothModel", "True")
+    self.scriptedEffect.setParameterDefault("SmoothModel", 1)
     
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
@@ -176,13 +176,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
       operationButton.setChecked(True)
     
-    if self.scriptedEffect.parameter("SmoothModel") == 'True':
+    if self.scriptedEffect.integerParameter("SmoothModel") != 0:
       self.smoothModelCheckbox.setChecked(True)
-    elif self.scriptedEffect.parameter('SmoothModel') == 'False':
-      self.smoothModelCheckbox.setChecked(False)
     else:
-      raise Exception('SmoothModel parameter must be either "True" or "False"')
-
+      self.smoothModelCheckbox.setChecked(False)
   #
   # Effect specific methods (the above ones are the API methods to override)
   #
@@ -193,13 +190,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameter("Operation", operationName)
 
   def onSmoothModelCheckboxStateChanged(self, newState):
-    logging.info('onSmoothModelCheckboxStateChanged, new state is: %s'%(str(newState)))
-    if newState==qt.Qt.Checked:
-      self.scriptedEffect.setParameter("SmoothModel", 'True')
-    elif newState==qt.Qt.Unchecked:
-      self.scriptedEffect.setParameter("SmoothModel", 'False')
-    else:
-      raise Exception('New checked state must be equal either qt.Qt.Checked or qt.Qt.Unchecked!')
+    smoothing = 1 if self.smoothModelCheckbox.isChecked() else 0
+    self.scriptedEffect.setParameter("SmoothModel", smoothing)
     self.updateModelFromSegmentMarkupNode()
     self.updateGUIFromMRML()
 
@@ -405,8 +397,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    smoothModelFlag = self.smoothModelCheckbox.isChecked()
-    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel, smoothModelFlag)
+    smoothing = self.scriptedEffect.integerParameter("SmoothModel") != 0
+    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel, smoothing)
 
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
