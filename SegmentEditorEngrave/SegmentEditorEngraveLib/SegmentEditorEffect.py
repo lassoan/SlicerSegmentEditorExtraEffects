@@ -181,9 +181,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     modeButton = list(self.buttonToModeTypeMap.keys())[list(self.buttonToModeTypeMap.values()).index(modeName)]
     modeButton.setChecked(True)
 
-    wasBlocked = self.textLineEdit.blockSignals(True)
-    self.textLineEdit.text = self.scriptedEffect.parameter("Text")
-    self.textLineEdit.blockSignals(wasBlocked)
+    if self.textLineEdit.text != self.scriptedEffect.parameter("Text"):
+      wasBlocked = self.textLineEdit.blockSignals(True)
+      self.textLineEdit.text = self.scriptedEffect.parameter("Text")
+      self.textLineEdit.blockSignals(wasBlocked)
 
     wasBlocked = self.textDepthSlider.blockSignals(True)
     self.textDepthSlider.value = self.scriptedEffect.doubleParameter("TextDepth")
