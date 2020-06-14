@@ -487,7 +487,15 @@ class EngraveLogic(object):
 
     if not outputModel.GetPolyData():
       outputModel.SetAndObserveMesh(vtk.vtkPolyData())
+
+    # Need to pause render, to prevent rendering pipeline updates during DeepCopy.
+    # (Details: During deepcopy, Modified() is called before the copy is fully completed,
+    # which can trigger a rendering pipeline update. During that update, the
+    # polydata that is still in inconsistent state is used, which can cause
+    # application crash.)
+    slicer.app.pauseRender()
     outputModel.GetPolyData().DeepCopy(self.extrusion.GetOutput())
+    slicer.app.resumeRender()
 
   def apply(self, segmentMarkupNode, segmentModel, text, textDepth, textHeight, mode):
 
