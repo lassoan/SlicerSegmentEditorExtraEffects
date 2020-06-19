@@ -14,6 +14,7 @@ class SegmentEditorEffect(SegmentEditorThresholdEffect):
   def __init__(self, scriptedEffect):
     SegmentEditorThresholdEffect.__init__(self, scriptedEffect)
     scriptedEffect.name = 'Local Threshold'
+    self.previewSteps = 4
 
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -50,7 +51,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     pass
 
   def preview(self):
-    opacity = 0.1 + (0.4 * self.previewState / self.previewSteps)
+    opacity = 0.1 + (0.8 * self.previewState / self.previewSteps)
     min = self.scriptedEffect.doubleParameter("MinimumThreshold")
     max = self.scriptedEffect.doubleParameter("MaximumThreshold")
 
@@ -69,7 +70,11 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if segmentID != self.previewedSegmentID:
       self.setCurrentSegmentTransparent()
 
+    # Change color hue slightly to make it easier to distinguish filled regions from preview
     r,g,b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+    import colorsys
+    colorHsv = colorsys.rgb_to_hsv(r, g, b)
+    (r, g, b) = colorsys.hsv_to_rgb((colorHsv[0]+0.2) % 1.0, colorHsv[1], colorHsv[2])
 
     # Set values to pipelines
     for sliceWidget in self.previewPipelines:
@@ -154,7 +159,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault(MINIMUM_FEATURE_MM_PARAMETER_NAME, 3)
-    self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_MASKING)
+    self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_GROWCUT)
     if slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11:
       self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
     SegmentEditorThresholdEffect.setMRMLDefaults(self)
@@ -222,7 +227,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.floodFillingFilterIsland.SetSeedPoints(ijkPoints)
 
     self.dilate = vtk.vtkImageDilateErode3D()
-    self.dilate.SetInputConnection(self.floodFillingFilterIsland .GetOutputPort())
+    self.dilate.SetInputConnection(self.floodFillingFilterIsland.GetOutputPort())
     self.dilate.SetDilateValue(LABEL_VALUE)
     self.dilate.SetErodeValue(BACKGROUND_VALUE)
     self.dilate.SetKernelSize(
@@ -306,6 +311,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if kernelSizePixel[0]<=0 and kernelSizePixel[1]<=0 and kernelSizePixel[2]<=0:
       return
 
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+
     # Get parameter set node
     parameterSetNode = self.scriptedEffect.parameterSetNode()
 
@@ -388,7 +395,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.islandMath = vtkITK.vtkITKIslandMath()
     self.islandMath.SetInputConnection(self.erodeCast.GetOutputPort())
     self.islandMath.SetFullyConnected(False)
-    self.islandMath.SetMinimumSize(10) #TODO: Why X voxels?
+    self.islandMath.SetMinimumSize(125)  # remove regions smaller than 5x5x5 voxels
 
     self.islandThreshold = vtk.vtkImageThreshold()
     self.islandThreshold.SetInputConnection(self.islandMath.GetOutputPort())
@@ -402,6 +409,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     # Snap the points to LABEL_VALUE voxels,
     snappedIJKPoints = self.snapIJKPointsToLabel(ijkPoints, self.islandThreshold.GetOutput())
     if snappedIJKPoints.GetNumberOfPoints() == 0:
+      qt.QApplication.restoreOverrideCursor()
       return
 
     # Convert points to real data coordinates. Required for vtkImageThresholdConnectivity.
@@ -471,6 +479,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
     parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
+
+    qt.QApplication.restoreOverrideCursor()
 
   def snapIJKPointsToLabel(self, ijkPoints, labelmap):
     import math
