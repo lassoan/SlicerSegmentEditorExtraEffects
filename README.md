@@ -3,6 +3,7 @@
 Experimental effects for Segment Editor in 3D Slicer. These effects are kept here insted of distributed with Slicer because it is not yet clear if they are as good or better than existing effects or they are still in development and we want to allow more frequent updates.
 
 - Draw Tube: segment tubular structures, such as catheters, nerves, vessels, by clicking on a few points along the path
+- Engrave: draw text on segments using engraving or embossing
 - Fast Marching: grow complete segmentation from the current segment; only one segment is supported at once, leaking out is controlled by adjustable target volume
 - Flood Filling: add to the current segment all similar intensity voxels near the clicked position
 - Mask Volume: fill a scalar volume with constant value inside/outside the selected segment
