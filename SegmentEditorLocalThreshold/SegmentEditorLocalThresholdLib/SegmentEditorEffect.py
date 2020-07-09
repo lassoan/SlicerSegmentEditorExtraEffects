@@ -66,6 +66,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
       logging.error("preview: Invalid segmentation display node!")
       color = [0.5,0.5,0.5]
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    if segmentID is None:
+      return
 
     # Make sure we keep the currently selected segment hidden (the user may have changed selection)
     if segmentID != self.previewedSegmentID:
