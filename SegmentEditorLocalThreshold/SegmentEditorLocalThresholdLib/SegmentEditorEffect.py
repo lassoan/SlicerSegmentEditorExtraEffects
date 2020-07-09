@@ -14,6 +14,7 @@ class SegmentEditorEffect(SegmentEditorThresholdEffect):
   def __init__(self, scriptedEffect):
     SegmentEditorThresholdEffect.__init__(self, scriptedEffect)
     scriptedEffect.name = 'Local Threshold'
+    self.previewSteps = 4
 
   def clone(self):
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
@@ -36,7 +37,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
 <p>
   Options:
   <ul style="feature: 0">
-    <li><b>Feature size:</b> Prevent leaks through features that are smaller than the specified size. Also used in WaterShed to specify the gradient magnitude.</li>
+    <li><b>Minimum diameter:</b> Prevent leaks through features that are smaller than the specified size.</li>
+    <li><b>Feature size:</b> Spatial smoothness constraint used for WaterShed. Larger values result in smoother extracted surface.</li>
     <li><b>Segmentation algorithm:</b> Algorithm used to perform the selection on the specified region.</li>
     <li><b>ROI:</b> Region of interest that the threshold segmentation will be perfomed within. Selecting a smaller region will reduce leaks and improve speed.</li>
   </ul>
@@ -50,7 +52,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     pass
 
   def preview(self):
-    opacity = 0.1 + (0.4 * self.previewState / self.previewSteps)
+    opacity = 0.1 + (0.8 * self.previewState / self.previewSteps)
     min = self.scriptedEffect.doubleParameter("MinimumThreshold")
     max = self.scriptedEffect.doubleParameter("MaximumThreshold")
 
@@ -69,7 +71,11 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if segmentID != self.previewedSegmentID:
       self.setCurrentSegmentTransparent()
 
+    # Change color hue slightly to make it easier to distinguish filled regions from preview
     r,g,b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
+    import colorsys
+    colorHsv = colorsys.rgb_to_hsv(r, g, b)
+    (r, g, b) = colorsys.hsv_to_rgb((colorHsv[0]+0.2) % 1.0, colorHsv[1], colorHsv[2])
 
     # Set values to pipelines
     for sliceWidget in self.previewPipelines:
@@ -120,19 +126,21 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.applyButton.setHidden(True)
     self.useForPaintButton.setHidden(True)
 
-    # Add feature options
-    self.minimumMinimumFeatureSize = slicer.qMRMLSpinBox()
-    self.minimumMinimumFeatureSize.setMRMLScene(slicer.mrmlScene)
-    self.minimumMinimumFeatureSize.quantity = "length"
-    self.minimumMinimumFeatureSize.value = 3.0
-    self.minimumMinimumFeatureSize.singleStep = 0.5
+    # Add diameter selector
+    self.minimumDiameterSpinBox = slicer.qMRMLSpinBox()
+    self.minimumDiameterSpinBox.setMRMLScene(slicer.mrmlScene)
+    self.minimumDiameterSpinBox.quantity = "length"
+    self.minimumDiameterSpinBox.value = 3.0
+    self.minimumDiameterSpinBox.singleStep = 0.5
+    self.minimumDiameterSpinBox.setToolTip("Minimum diameter of the structure. Regions that are connected to the selected point by a bridge"
+      " that this is thinner than this size will be excluded to prevent unwanted leaks through small holes.")
     self.kernelSizePixel = qt.QLabel()
-    self.kernelSizePixel.setToolTip("Minimum size of features in pixels. Computed from the segment's spacing and the specified feature size.")
-    featureSizeFrame = qt.QHBoxLayout()
-    featureSizeFrame.addWidget(self.minimumMinimumFeatureSize)
-    featureSizeFrame.addWidget(self.kernelSizePixel)
-    self.featureSizeMmLabel = self.scriptedEffect.addLabeledOptionsWidget("Feature size:", featureSizeFrame)
-    self.scriptedEffect.addOptionsWidget(featureSizeFrame)
+    self.kernelSizePixel.setToolTip("Minimum diameter of the structure in pixels. Computed from the segment's spacing and the specified feature size.")
+    minimumDiameterFrame = qt.QHBoxLayout()
+    minimumDiameterFrame.addWidget(self.minimumDiameterSpinBox)
+    minimumDiameterFrame.addWidget(self.kernelSizePixel)
+    self.minimumDiameterMmLabel = self.scriptedEffect.addLabeledOptionsWidget("Minimum diameter:", minimumDiameterFrame)
+    self.scriptedEffect.addOptionsWidget(minimumDiameterFrame)
 
     # Add algorithm options
     self.segmentationAlgorithmSelector = qt.QComboBox()
@@ -140,6 +148,15 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.segmentationAlgorithmSelector.addItem(SEGMENTATION_ALGORITHM_GROWCUT)
     self.segmentationAlgorithmSelector.addItem(SEGMENTATION_ALGORITHM_WATERSHED)
     self.scriptedEffect.addLabeledOptionsWidget("Segmentation algorithm: ", self.segmentationAlgorithmSelector)
+
+    # Add feature size selector
+    self.featureSizeSpinBox = slicer.qMRMLSpinBox()
+    self.featureSizeSpinBox.setMRMLScene(slicer.mrmlScene)
+    self.featureSizeSpinBox.quantity = "length"
+    self.featureSizeSpinBox.value = 3.0
+    self.featureSizeSpinBox.singleStep = 0.5
+    self.featureSizeSpinBox.setToolTip("Spatial smoothness constraint used for WaterShed. Larger values result in smoother extracted surface.")
+    self.scriptedEffect.addLabeledOptionsWidget("Feature size: ", self.featureSizeSpinBox)
 
     # Add ROI options
     self.roiSelector = slicer.qMRMLNodeComboBox()
@@ -149,12 +166,14 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
 
     # Connections
-    self.minimumMinimumFeatureSize.connect("valueChanged(double)", self.updateMRMLFromGUI)
+    self.minimumDiameterSpinBox.connect("valueChanged(double)", self.updateMRMLFromGUI)
+    self.featureSizeSpinBox.connect("valueChanged(double)", self.updateMRMLFromGUI)
     self.segmentationAlgorithmSelector.connect("currentIndexChanged(int)", self.updateMRMLFromGUI)
 
   def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault(MINIMUM_FEATURE_MM_PARAMETER_NAME, 3)
-    self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_MASKING)
+    self.scriptedEffect.setParameterDefault(MINIMUM_DIAMETER_MM_PARAMETER_NAME, 3)
+    self.scriptedEffect.setParameterDefault(FEATURE_SIZE_MM_PARAMETER_NAME, 3)
+    self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_GROWCUT)
     if slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11:
       self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
     SegmentEditorThresholdEffect.setMRMLDefaults(self)
@@ -162,10 +181,19 @@ Fill segment in a selected region based on master volume intensity range<br>.
   def updateGUIFromMRML(self):
     SegmentEditorThresholdEffect.updateGUIFromMRML(self)
 
-    featureSizeMm = self.scriptedEffect.doubleParameter(MINIMUM_FEATURE_MM_PARAMETER_NAME)
-    wasBlocked = self.minimumMinimumFeatureSize.blockSignals(True)
-    self.minimumMinimumFeatureSize.value = abs(featureSizeMm)
-    self.minimumMinimumFeatureSize.blockSignals(wasBlocked)
+    minimumDiameterMm = self.scriptedEffect.doubleParameter(MINIMUM_DIAMETER_MM_PARAMETER_NAME)
+    wasBlocked = self.minimumDiameterSpinBox.blockSignals(True)
+    self.minimumDiameterSpinBox.value = abs(minimumDiameterMm)
+    self.minimumDiameterSpinBox.blockSignals(wasBlocked)
+
+    featureSizeMm = self.scriptedEffect.doubleParameter(FEATURE_SIZE_MM_PARAMETER_NAME)
+    wasBlocked = self.featureSizeSpinBox.blockSignals(True)
+    self.featureSizeSpinBox.value = abs(featureSizeMm)
+    self.featureSizeSpinBox.blockSignals(wasBlocked)
+
+    # Only enable feature size selection for watershed method
+    segmentationAlgorithm = self.scriptedEffect.parameter(SEGMENTATION_ALGORITHM_PARAMETER_NAME)
+    self.featureSizeSpinBox.enabled = (segmentationAlgorithm == SEGMENTATION_ALGORITHM_WATERSHED)
 
     segmentationAlgorithm = self.scriptedEffect.parameter(SEGMENTATION_ALGORITHM_PARAMETER_NAME)
     wasBlocked = self.segmentationAlgorithmSelector.blockSignals(True)
@@ -184,8 +212,12 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
   def updateMRMLFromGUI(self):
     SegmentEditorThresholdEffect.updateMRMLFromGUI(self)
-    featureSizeMm = self.minimumMinimumFeatureSize.value
-    self.scriptedEffect.setParameter(MINIMUM_FEATURE_MM_PARAMETER_NAME, featureSizeMm)
+
+    minimumDiameterMm = self.minimumDiameterSpinBox.value
+    self.scriptedEffect.setParameter(MINIMUM_DIAMETER_MM_PARAMETER_NAME, minimumDiameterMm)
+
+    featureSizeMm = self.featureSizeSpinBox.value
+    self.scriptedEffect.setParameter(FEATURE_SIZE_MM_PARAMETER_NAME, featureSizeMm)
 
     segmentationAlgorithm = self.segmentationAlgorithmSelector.currentText
     self.scriptedEffect.setParameter(SEGMENTATION_ALGORITHM_PARAMETER_NAME, segmentationAlgorithm)
@@ -222,7 +254,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.floodFillingFilterIsland.SetSeedPoints(ijkPoints)
 
     self.dilate = vtk.vtkImageDilateErode3D()
-    self.dilate.SetInputConnection(self.floodFillingFilterIsland .GetOutputPort())
+    self.dilate.SetInputConnection(self.floodFillingFilterIsland.GetOutputPort())
     self.dilate.SetDilateValue(LABEL_VALUE)
     self.dilate.SetErodeValue(BACKGROUND_VALUE)
     self.dilate.SetKernelSize(
@@ -281,7 +313,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     labelImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(seedLabelmapNode.GetName()))
     backgroundImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(masterVolumeNode.GetName()))
     # Run watershed filter
-    featureImage = sitk.GradientMagnitudeRecursiveGaussian(backgroundImage, float(self.scriptedEffect.doubleParameter(MINIMUM_FEATURE_MM_PARAMETER_NAME)))
+    featureImage = sitk.GradientMagnitudeRecursiveGaussian(backgroundImage, float(self.scriptedEffect.doubleParameter(FEATURE_SIZE_MM_PARAMETER_NAME)))
     del backgroundImage
     f = sitk.MorphologicalWatershedFromMarkersImageFilter()
     f.SetMarkWatershedLine(False)
@@ -305,6 +337,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
     kernelSizePixel = self.getKernelSizePixel()
     if kernelSizePixel[0]<=0 and kernelSizePixel[1]<=0 and kernelSizePixel[2]<=0:
       return
+
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     # Get parameter set node
     parameterSetNode = self.scriptedEffect.parameterSetNode()
@@ -388,7 +422,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.islandMath = vtkITK.vtkITKIslandMath()
     self.islandMath.SetInputConnection(self.erodeCast.GetOutputPort())
     self.islandMath.SetFullyConnected(False)
-    self.islandMath.SetMinimumSize(10) #TODO: Why X voxels?
+    self.islandMath.SetMinimumSize(125)  # remove regions smaller than 5x5x5 voxels
 
     self.islandThreshold = vtk.vtkImageThreshold()
     self.islandThreshold.SetInputConnection(self.islandMath.GetOutputPort())
@@ -402,6 +436,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     # Snap the points to LABEL_VALUE voxels,
     snappedIJKPoints = self.snapIJKPointsToLabel(ijkPoints, self.islandThreshold.GetOutput())
     if snappedIJKPoints.GetNumberOfPoints() == 0:
+      qt.QApplication.restoreOverrideCursor()
       return
 
     # Convert points to real data coordinates. Required for vtkImageThresholdConnectivity.
@@ -472,6 +507,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
     parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
     parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
 
+    qt.QApplication.restoreOverrideCursor()
+
   def snapIJKPointsToLabel(self, ijkPoints, labelmap):
     import math
     snapIJKPoints = vtk.vtkPoints()
@@ -520,11 +557,12 @@ Fill segment in a selected region based on master volume intensity range<br>.
       selectedSegmentLabelmapSpacing = selectedSegmentLabelmap.GetSpacing()
 
     # size rounded to nearest odd number. If kernel size is even then image gets shifted.
-    featureSizeMm = abs(self.scriptedEffect.doubleParameter(MINIMUM_FEATURE_MM_PARAMETER_NAME))
-    kernelSizePixel = [int(round((featureSizeMm / selectedSegmentLabelmapSpacing[componentIndex]+1)/2)*2-1) for componentIndex in range(3)]
+    minimumDiameterMm = abs(self.scriptedEffect.doubleParameter(MINIMUM_DIAMETER_MM_PARAMETER_NAME))
+    kernelSizePixel = [int(round((minimumDiameterMm / selectedSegmentLabelmapSpacing[componentIndex]+1)/2)*2-1) for componentIndex in range(3)]
     return kernelSizePixel
 
-MINIMUM_FEATURE_MM_PARAMETER_NAME = "MinimumFeatureSizeMm"
+MINIMUM_DIAMETER_MM_PARAMETER_NAME = "MinimumDiameterMm"
+FEATURE_SIZE_MM_PARAMETER_NAME = "FeatureSizeMm"
 SEGMENTATION_ALGORITHM_PARAMETER_NAME = "SegmentationAlgorithm"
 SEGMENTATION_ALGORITHM_MASKING = "Masking"
 SEGMENTATION_ALGORITHM_GROWCUT = "GrowCut"

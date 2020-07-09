@@ -353,6 +353,8 @@ modifiable.
     """
     Fill voxels of the input volume inside/outside the masking model with the provided fill value
     maskExtent: optional output to return computed mask extent (expected input is a 6-element list)
+    fillValues: list containing one or two fill values. If fill mode is inside or outside then only one value is specified in the list.
+      If fill mode is inside&outside then the list must contain two values: first is the inside fill, second is the outside fill value.
     """
 
     segmentIDs = vtk.vtkStringArray()

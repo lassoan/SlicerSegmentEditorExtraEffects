@@ -7,11 +7,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   """This effect uses markup fiducials to segment the input volume"""
 
   def __init__(self, scriptedEffect):
-    scriptedEffect.name = 'Surface cut'
+    scriptedEffect.name = 'Engrave'
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
 
-    self.logic = SurfaceCutLogic(scriptedEffect)
+    self.logic = EngraveLogic(scriptedEffect)
 
     # Effect-specific members
     self.segmentMarkupNode = None
@@ -21,7 +21,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.segmentModel = None
     self.observedSegmentation = None
     self.segmentObserver = None
-    self.buttonToOperationNameMap = {}
+    self.buttonToModeTypeMap = {}
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -38,72 +38,76 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
 
   def helpText(self):
-    return """<html>Use markup fiducials to fill a segment<br>. The surface is generated from the placed points.
-</html>"""
+    return """<html>Engrave or emboss text on a segment's surface</html>"""
 
   def setupOptionsFrame(self):
-    self.operationRadioButtons = []
+    self.modeRadioButtons = []
 
-    #Fiducial Placement widget
-    self.fiducialPlacementToggle = slicer.qSlicerMarkupsPlaceWidget()
-    self.fiducialPlacementToggle.setMRMLScene(slicer.mrmlScene)
-    self.fiducialPlacementToggle.placeMultipleMarkups = self.fiducialPlacementToggle.ForcePlaceMultipleMarkups
-    self.fiducialPlacementToggle.buttonsVisible = False
-    self.fiducialPlacementToggle.show()
-    self.fiducialPlacementToggle.placeButton().show()
-    self.fiducialPlacementToggle.deleteButton().show()
+    # Text height slider
+    self.textLineEdit = qt.QLineEdit()
+    self.textLineEdit.setToolTip("Text to be added")
+    self.textLineEdit.text = "Text"
+    self.textLineEditLabel = self.scriptedEffect.addLabeledOptionsWidget("Text:", self.textLineEdit)
+
+    # Fiducial Placement widget
+    self.markupsPlacementToggle = slicer.qSlicerMarkupsPlaceWidget()
+    self.markupsPlacementToggle.setMRMLScene(slicer.mrmlScene)
+    #self.markupsPlacementToggle.placeMultipleMarkups = self.markupsPlacementToggle.ForcePlaceMultipleMarkups
+    self.markupsPlacementToggle.buttonsVisible = False
+    self.markupsPlacementToggle.show()
+    self.markupsPlacementToggle.placeButton().show()
+    self.markupsPlacementToggle.deleteButton().show()
 
     # Edit surface button
     self.editButton = qt.QPushButton("Edit")
     self.editButton.objectName = self.__class__.__name__ + 'Edit'
     self.editButton.setToolTip("Edit the previously placed group of fiducials.")
 
-    fiducialAction = qt.QHBoxLayout()
-    fiducialAction.addWidget(self.fiducialPlacementToggle)
-    fiducialAction.addWidget(self.editButton)
-    self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialAction)
+    markupsActionLayout = qt.QHBoxLayout()
+    markupsActionLayout.addWidget(self.markupsPlacementToggle)
+    markupsActionLayout.addWidget(self.editButton)
+    self.scriptedEffect.addLabeledOptionsWidget("Placement: ", markupsActionLayout)
 
-    #Operation buttons
-    self.eraseInsideButton = qt.QRadioButton("Erase inside")
-    self.operationRadioButtons.append(self.eraseInsideButton)
-    self.buttonToOperationNameMap[self.eraseInsideButton] = 'ERASE_INSIDE'
+    # Text height slider
+    self.textHeightSlider = ctk.ctkSliderWidget()
+    self.textHeightSlider.setToolTip("Size scale of the text.")
+    self.textHeightSlider.minimum = 0.01
+    self.textHeightSlider.maximum = 100.0
+    self.textHeightSlider.value = 10
+    self.textHeightSlider.singleStep = 0.1
+    self.textHeightSlider.pageStep = 1.0
+    self.textHeightLabel = self.scriptedEffect.addLabeledOptionsWidget("Text height:", self.textHeightSlider) 
 
-    self.eraseOutsideButton = qt.QRadioButton("Erase outside")
-    self.operationRadioButtons.append(self.eraseOutsideButton)
-    self.buttonToOperationNameMap[self.eraseOutsideButton] = 'ERASE_OUTSIDE'
+    # Text height slider
+    self.textDepthSlider = ctk.ctkSliderWidget()
+    self.textDepthSlider.setToolTip("Thickness of the generated text.")
+    self.textDepthSlider.minimum = 0.1
+    self.textDepthSlider.maximum = 20.0
+    self.textDepthSlider.value = 5
+    self.textDepthSlider.singleStep = 0.1
+    self.textDepthSlider.pageStep = 1.0
+    self.textDepthLabel = self.scriptedEffect.addLabeledOptionsWidget("Depth:", self.textDepthSlider) 
 
-    self.fillInsideButton = qt.QRadioButton("Fill inside")
-    self.operationRadioButtons.append(self.fillInsideButton)
-    self.buttonToOperationNameMap[self.fillInsideButton] = 'FILL_INSIDE'
+    # Mode buttons
+    self.engraveButton = qt.QRadioButton("Engrave")
+    self.modeRadioButtons.append(self.engraveButton)
+    self.buttonToModeTypeMap[self.engraveButton] = "ENGRAVE"
 
-    self.fillOutsideButton = qt.QRadioButton("Fill outside")
-    self.operationRadioButtons.append(self.fillOutsideButton)
-    self.buttonToOperationNameMap[self.fillOutsideButton] = 'FILL_OUTSIDE'
+    self.embossButton = qt.QRadioButton("Emboss")
+    self.modeRadioButtons.append(self.embossButton)
+    self.buttonToModeTypeMap[self.embossButton] = "EMBOSS"
 
-    self.setButton = qt.QRadioButton("Set")
-    self.operationRadioButtons.append(self.setButton)
-    self.buttonToOperationNameMap[self.setButton] = 'SET'
+    # Mode buttons layout
+    modeLayout = qt.QVBoxLayout()
+    modeLayout.addWidget(self.engraveButton)
+    modeLayout.addWidget(self.embossButton)
 
-    #Operation buttons layout
-    operationLayout = qt.QGridLayout()
-    operationLayout.addWidget(self.eraseInsideButton, 0, 0)
-    operationLayout.addWidget(self.eraseOutsideButton, 1, 0)
-    operationLayout.addWidget(self.fillInsideButton, 0, 1)
-    operationLayout.addWidget(self.fillOutsideButton, 1, 1)
-    operationLayout.addWidget(self.setButton, 0, 2)
-
-    self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
-
-    # Smooth model checkbox layout
-    self.smoothModelCheckbox = qt.QCheckBox()
-    self.smoothModelCheckbox.setChecked(True) # model smoothing initial default is True
-    self.smoothModelCheckbox.setToolTip("Model is smoothed if checked, faceted if unchecked")
-    self.scriptedEffect.addLabeledOptionsWidget("Smooth model:", self.smoothModelCheckbox)
+    self.scriptedEffect.addLabeledOptionsWidget("Mode:", modeLayout)
 
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
-    self.applyButton.setToolTip("Generate surface from markup fiducials.")
+    self.applyButton.setToolTip("Generate tube from markup fiducials.")
     self.scriptedEffect.addOptionsWidget(self.applyButton)
 
     # Cancel button
@@ -111,21 +115,23 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.cancelButton.objectName = self.__class__.__name__ + 'Cancel'
     self.cancelButton.setToolTip("Clear fiducials and remove from scene.")
 
-    #Finish action buttons
+    # Finish action buttons
     finishAction = qt.QHBoxLayout()
     finishAction.addWidget(self.cancelButton)
     finishAction.addWidget(self.applyButton)
     self.scriptedEffect.addOptionsWidget(finishAction)
 
-    # connections
-    for button in self.operationRadioButtons:
+    # Connections
+    for button in self.modeRadioButtons:
       button.connect('toggled(bool)',
-      lambda toggle, widget=self.buttonToOperationNameMap[button]: self.onOperationSelectionChanged(widget, toggle))
-    self.smoothModelCheckbox.connect('stateChanged(int)', self.onSmoothModelCheckboxStateChanged)
+      lambda toggle, widget=self.buttonToModeTypeMap[button]: self.onModeSelectionChanged(widget, toggle))
     self.applyButton.connect('clicked()', self.onApply)
     self.cancelButton.connect('clicked()', self.onCancel)
     self.editButton.connect('clicked()', self.onEdit)
-    self.fiducialPlacementToggle.placeButton().clicked.connect(self.onFiducialPlacementToggleChanged)
+    self.markupsPlacementToggle.placeButton().clicked.connect(self.onmarkupsPlacementToggleChanged)
+    self.textLineEdit.connect("textEdited(QString)", self.onTextChanged)
+    self.textDepthSlider.connect('valueChanged(double)', self.onTextDepthChanged)
+    self.textHeightSlider.connect("valueChanged(double)", self.onTextHeightChanged)
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
@@ -135,9 +141,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Create empty markup fiducial node
     if not self.segmentMarkupNode:
       self.createNewMarkupNode()
-      self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+      self.markupsPlacementToggle.setCurrentNode(self.segmentMarkupNode)
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
-      self.fiducialPlacementToggle.setPlaceModeEnabled(False)
+      self.markupsPlacementToggle.setPlaceModeEnabled(False)
     self.setAndObserveSegmentEditorNode(self.scriptedEffect.parameterSetNode())
     self.observeSegmentation(True)
     self.updateGUIFromMRML()
@@ -152,8 +158,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return slicer.util.mainWindow().cursor
 
   def setMRMLDefaults(self):
-    self.scriptedEffect.setParameterDefault("Operation", "SET")
-    self.scriptedEffect.setParameterDefault("SmoothModel", 1)
+    self.scriptedEffect.setParameterDefault("Text", "Text")
+    self.scriptedEffect.setParameterDefault("Mode", "ENGRAVE")
+    self.scriptedEffect.setParameterDefault("TextDepth", 5.0)
+    self.scriptedEffect.setParameterDefault("TextHeight", 10.0) 
 
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
@@ -167,32 +175,37 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      self.editButton.setVisible(segment.HasTag("SurfaceCutEffectMarkupPositions"))
+      self.editButton.setVisible(segment.HasTag("EngraveEffectMarkupPositions"))
 
-    operationName = self.scriptedEffect.parameter("Operation")
-    if operationName != "":
-      operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
-      operationButton.setChecked(True)
+    modeName = self.scriptedEffect.parameter("Mode")
+    modeButton = list(self.buttonToModeTypeMap.keys())[list(self.buttonToModeTypeMap.values()).index(modeName)]
+    modeButton.setChecked(True)
 
-    self.smoothModelCheckbox.setChecked(
-      self.scriptedEffect.integerParameter("SmoothModel") != 0)
+    if self.textLineEdit.text != self.scriptedEffect.parameter("Text"):
+      wasBlocked = self.textLineEdit.blockSignals(True)
+      self.textLineEdit.text = self.scriptedEffect.parameter("Text")
+      self.textLineEdit.blockSignals(wasBlocked)
+
+    wasBlocked = self.textDepthSlider.blockSignals(True)
+    self.textDepthSlider.value = self.scriptedEffect.doubleParameter("TextDepth")
+    self.textDepthSlider.blockSignals(wasBlocked)
+
+    wasBlocked = self.textHeightSlider.blockSignals(True)
+    self.textHeightSlider.value = self.scriptedEffect.doubleParameter("TextHeight")
+    self.textHeightSlider.blockSignals(wasBlocked)
+
   #
   # Effect specific methods (the above ones are the API methods to override)
   #
 
-  def onOperationSelectionChanged(self, operationName, toggle):
+  def onModeSelectionChanged(self, modeName, toggle):
     if not toggle:
       return
-    self.scriptedEffect.setParameter("Operation", operationName)
-
-  def onSmoothModelCheckboxStateChanged(self, newState):
-    smoothing = 1 if self.smoothModelCheckbox.isChecked() else 0
-    self.scriptedEffect.setParameter("SmoothModel", smoothing)
+    self.scriptedEffect.setParameter("Mode", modeName)
     self.updateModelFromSegmentMarkupNode()
-    self.updateGUIFromMRML()
 
-  def onFiducialPlacementToggleChanged(self):
-    if self.fiducialPlacementToggle.placeButton().isChecked():
+  def onmarkupsPlacementToggleChanged(self):
+    if self.markupsPlacementToggle.placeButton().isChecked():
       # Create empty model node
       if self.segmentModel is None:
         self.createNewModelNode()
@@ -200,37 +213,36 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       # Create empty markup fiducial node
       if self.segmentMarkupNode is None:
         self.createNewMarkupNode()
-        self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+        self.markupsPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+
+  def onTextChanged(self, text):
+    self.scriptedEffect.setParameter("Text", text)
+    self.updateModelFromSegmentMarkupNode()
+
+  def onTextDepthChanged(self, depth):
+    self.scriptedEffect.setParameter("TextDepth", depth)
+    self.updateModelFromSegmentMarkupNode()
+
+  def onTextHeightChanged(self, height):
+    self.scriptedEffect.setParameter("TextHeight", height)
+    self.updateModelFromSegmentMarkupNode()
 
   def onSegmentModified(self, caller, event):
-    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() is not 0:
+    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfControlPoints() is not 0:
       self.reset()
       # Create model node prior to markup node for display order
       self.createNewModelNode()
       self.createNewMarkupNode()
-      self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+      self.markupsPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     else:
       self.updateGUIFromMRML()
-
-    if self.segmentModel:
-      # Get color of edited segment
-      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      displayNode = segmentationNode.GetDisplayNode()
-      if displayNode is None:
-        logging.error("preview: Invalid segmentation display node!")
-        color = [0.5, 0.5, 0.5]
-      if self.segmentModel.GetDisplayNode():
-        segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-        r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-        if (r,g,b) != self.segmentModel.GetDisplayNode().GetColor():
-          self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
 
   def onCancel(self):
     self.reset()
     # Create model node prior to markup node for display order
     self.createNewModelNode()
     self.createNewMarkupNode()
-    self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+    self.markupsPlacementToggle.setCurrentNode(self.segmentMarkupNode)
 
   def onEdit(self):
     # Create empty model node
@@ -242,7 +254,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
 
     fPosStr = vtk.mutable("")
-    segment.GetTag("SurfaceCutEffectMarkupPositions", fPosStr)
+    segment.GetTag("EngraveEffectMarkupPositions", fPosStr)
     # convert from space-separated list o fnumbers to 1D array
     import numpy
     fPos = numpy.fromstring(str(fPosStr), sep=' ')
@@ -256,8 +268,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.updateModelFromSegmentMarkupNode()
 
   def reset(self):
-    if self.fiducialPlacementToggle.placeModeEnabled:
-      self.fiducialPlacementToggle.setPlaceModeEnabled(False)
+    if self.markupsPlacementToggle.placeModeEnabled:
+      self.markupsPlacementToggle.setPlaceModeEnabled(False)
 
     if not self.editButton.isEnabled():
       self.editButton.setEnabled(True)
@@ -274,7 +286,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
   def onApply(self):
     if self.getNumberOfDefinedControlPoints() < 3:
-      logging.warning("Cannot apply, segment markup node has less than 3 control points")
+      logging.warning("Cannot apply, segment markup node has less than 2 control points")
       return
 
     # Allow users revert to this state by clicking Undo
@@ -283,17 +295,21 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     self.observeSegmentation(False)
-    self.logic.cutSurfaceWithModel(self.segmentMarkupNode, self.segmentModel)
+    self.logic.apply(self.segmentMarkupNode, self.segmentModel, 
+      self.scriptedEffect.parameter("Text"),
+      self.scriptedEffect.doubleParameter("TextDepth"),
+      self.scriptedEffect.doubleParameter("TextHeight"),
+      self.scriptedEffect.parameter("Mode"))
     self.reset()
     # Create model node prior to markup node for display order
     self.createNewModelNode()
     self.createNewMarkupNode()
-    self.fiducialPlacementToggle.setCurrentNode(self.segmentMarkupNode)
+    self.markupsPlacementToggle.setCurrentNode(self.segmentMarkupNode)
     self.observeSegmentation(True)
     qt.QApplication.restoreOverrideCursor()
 
   def observeSegmentation(self, observationEnabled):
-    import vtkSegmentationCorePython as vtkSegmentationCore
+    import vtkSegmentationCore
     if self.scriptedEffect.parameterSetNode().GetSegmentationNode():
       segmentation = self.scriptedEffect.parameterSetNode().GetSegmentationNode().GetSegmentation()
     else:
@@ -311,25 +327,26 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def createNewModelNode(self):
     if self.segmentModel is None:
       self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
-      self.segmentModel.SetName("SegmentEditorSurfaceCutModel")
+      self.segmentModel.SetName("SegmentEditorEngraveModel")
 
       modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        self.segmentModel.GetDisplayNode().Visibility2DOn()
-      else:
-        self.segmentModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      self.segmentModel.GetDisplayNode().Visibility2DOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
-      displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
-      displayNode.SetTextScale(0)
-      self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-      self.segmentMarkupNode.SetName('C')
-      self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
+      #displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
+      #displayNode.SetTextScale(0)
+      self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode", "E")
+      self.segmentMarkupNode.CreateDefaultDisplayNodes()
+      displayNode = self.segmentMarkupNode.GetDisplayNode()
+      displayNode.SetHandlesInteractive(True)
+      displayNode.SetOpacity(1.0)
+
+      #self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
 
@@ -379,83 +396,119 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.scriptedEffect.parameterSetNode() is None:
       return
 
-    # Get color of edited segment
-    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-    if segmentID and self.segmentModel:
-      if self.segmentModel.GetDisplayNode():
-        r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-        if (r, g, b) != self.segmentModel.GetDisplayNode().GetColor():
-          self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
-
     self.updateGUIFromMRML()
 
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    smoothing = self.scriptedEffect.integerParameter("SmoothModel") != 0
-    self.logic.updateModelFromMarkup(self.segmentMarkupNode, self.segmentModel, smoothing)
+    self.logic.updateModel(self.segmentMarkupNode, self.segmentModel, 
+      self.scriptedEffect.parameter("Text"),
+      self.scriptedEffect.doubleParameter("TextDepth"),
+      self.scriptedEffect.doubleParameter("TextHeight"))
+
+    displayNode = self.segmentMarkupNode.GetDisplayNode()
+    if displayNode:
+      if self.segmentMarkupNode.GetNumberOfControlPoints() < 3:
+        displayNode.SetHandlesInteractive(False)
+        displayNode.SetOpacity(1.0)
+      else:
+        displayNode.SetHandlesInteractive(True)
+        displayNode.SetOpacity(0.0)
+
 
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
 
   def getNumberOfDefinedControlPoints(self):
-    count = 0
-    if self.segmentMarkupNode:
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
-      else:
-        count = self.segmentMarkupNode.GetNumberOfFiducials()
-    return count
+    if not self.segmentMarkupNode:
+      return 0
+    return self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
 
-class SurfaceCutLogic(object):
+class EngraveLogic(object):
 
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
+    self.vectorText = vtk.vtkVectorText()
+
+    self.scaleAndTranslateTransform = vtk.vtkTransform()
+
+    self.polyScaleTransform = vtk.vtkTransformPolyDataFilter()
+    self.polyScaleTransform.SetTransform(self.scaleAndTranslateTransform)
+    self.polyScaleTransform.SetInputConnection(self.vectorText.GetOutputPort())
+
+    # get normals
+    self.polyDataNormals = vtk.vtkPolyDataNormals()  # computes cell normals
+    self.polyDataNormals.SetInputConnection(self.polyScaleTransform.GetOutputPort())
+    self.polyDataNormals.ConsistencyOn()
+
+    # extrude the marker to underside of valve
+    self.extrusion = vtk.vtkLinearExtrusionFilter()
+    self.extrusion.SetInputConnection(self.polyDataNormals.GetOutputPort())
+    self.extrusion.SetExtrusionTypeToVectorExtrusion()
+    self.extrusion.CappingOn()
 
   def setUpModelDisplayNode(self, modelDisplayNode):
-    # Get color of edited segment
-    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-    r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-
-    modelDisplayNode.SetColor(r, g, b)  # Edited segment color
+    modelDisplayNode.SetColor(1.0, 1.0, 0.0)
     modelDisplayNode.BackfaceCullingOff()
-    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-      modelDisplayNode.Visibility2DOn()
-    else:
-      modelDisplayNode.SliceIntersectionVisibilityOn()
-    modelDisplayNode.SetSliceIntersectionThickness(4)
-    modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
+    modelDisplayNode.Visibility2DOn()
+    modelDisplayNode.SetSliceIntersectionThickness(2)
+    modelDisplayNode.SetOpacity(1.0)  # Between 0-1, 1 being opaque
 
-  def updateModelFromMarkup(self, inputMarkup, outputModel, smoothModelFlag=True):
+  def updateModel(self, inputMarkup, outputModel, text, textDepth, textHeight):
+
     """
     Update model to enclose all points in the input markup list
     """
-    # create surface from points
-    markupsToModel = slicer.modules.markupstomodel.logic()
-    markupsToModel.UpdateClosedSurfaceModel(inputMarkup, outputModel, smoothModelFlag)
-    displayNode = outputModel.GetDisplayNode()
-    # Set flat interpolation for nice display of large planar facets
-    if displayNode:
-      if smoothModelFlag:
-        displayNode.SetInterpolation(slicer.vtkMRMLDisplayNode.GouraudInterpolation)
-      else:
-        displayNode.SetInterpolation(slicer.vtkMRMLDisplayNode.FlatInterpolation)
 
-  def cutSurfaceWithModel(self, segmentMarkupNode, segmentModel):
+    if inputMarkup.GetNumberOfControlPoints() < 3:
+      outputModel.SetAndObserveMesh(None)
+      return
 
-    import vtkSegmentationCorePython as vtkSegmentationCore
+    self.vectorText.SetText(text)
+
+    planeToWorldMatrix = vtk.vtkMatrix4x4()
+    inputMarkup.GetPlaneToWorldMatrix(planeToWorldMatrix)
+
+    # scale marker and translate to desired location on skirt
+    self.scaleAndTranslateTransform.Identity()
+    self.scaleAndTranslateTransform.Concatenate(planeToWorldMatrix)
+    #self.scaleAndTranslateTransform.Translate(planePosition)
+    self.scaleAndTranslateTransform.Scale(textHeight, textHeight, 1)
+    #scaleAndTranslateTransform.Translate(-0.5, -0.5, 0)  # center the unit letter
+    self.scaleAndTranslateTransform.Translate(0, 0, -textDepth/2.0)  # center the unit letter
+
+    # extrude the marker to underside of valve
+    planeNormal = [planeToWorldMatrix.GetElement(0,2), planeToWorldMatrix.GetElement(1,2), planeToWorldMatrix.GetElement(2,2)]
+    self.extrusion.SetVector(planeNormal)
+    self.extrusion.SetScaleFactor(textDepth)
+
+    self.extrusion.Update()
+
+    if not outputModel.GetPolyData():
+      outputModel.SetAndObserveMesh(vtk.vtkPolyData())
+
+    # Need to pause render, to prevent rendering pipeline updates during DeepCopy.
+    # (Details: During deepcopy, Modified() is called before the copy is fully completed,
+    # which can trigger a rendering pipeline update. During that update, the
+    # polydata that is still in inconsistent state is used, which can cause
+    # application crash.)
+    slicer.app.pauseRender()
+    outputModel.GetPolyData().DeepCopy(self.extrusion.GetOutput())
+    slicer.app.resumeRender()
+
+  def apply(self, segmentMarkupNode, segmentModel, text, textDepth, textHeight, mode):
+
+    self.updateModel(segmentMarkupNode, segmentModel, text, textDepth, textHeight)
+
+    import vtkSegmentationCore
 
     if not segmentMarkupNode:
       raise AttributeError("{}: segment markup node not set.".format(self.__class__.__name__))
     if not segmentModel:
       raise AttributeError("{}: segment model not set.".format(self.__class__.__name__))
 
-    if segmentMarkupNode and segmentModel.GetPolyData().GetNumberOfPolys() > 0:
-      operationName = self.scriptedEffect.parameter("Operation")
-
+    if segmentMarkupNode and segmentModel.GetPolyData().GetNumberOfCells() > 0:
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
       if not segmentationNode:
         raise AttributeError("{}: Segmentation node not set.".format(self.__class__.__name__))
@@ -500,12 +553,8 @@ class SurfaceCutLogic(object):
 
       stencilToImage = vtk.vtkImageStencilToImage()
       stencilToImage.SetInputConnection(polyToStencil.GetOutputPort())
-      if operationName in ("FILL_INSIDE", "ERASE_INSIDE", "SET"):
-        stencilToImage.SetInsideValue(1.0)
-        stencilToImage.SetOutsideValue(0.0)
-      else:
-        stencilToImage.SetInsideValue(0.0)
-        stencilToImage.SetOutsideValue(1.0)
+      stencilToImage.SetInsideValue(1.0)
+      stencilToImage.SetOutsideValue(0.0)
       stencilToImage.SetOutputScalarType(modifierLabelmap.GetScalarType())
 
       stencilPositioner = vtk.vtkImageChangeInformation()
@@ -524,24 +573,25 @@ class SurfaceCutLogic(object):
         modifierLabelmap, orientedStencilPositionerOutput,
         vtkSegmentationCore.vtkOrientedImageDataResample.OPERATION_MAXIMUM)
 
-      modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd
-      if operationName == "ERASE_INSIDE" or operationName == "ERASE_OUTSIDE":
-        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove
-      elif operationName == "SET":
-        modMode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet
-
-      self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, modMode)
+      modeName = self.scriptedEffect.parameter("Mode")
+      if modeName == "EMBOSS":
+        mode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd
+      elif modeName == "ENGRAVE":
+        mode = slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeRemove
+      else:
+        logging.error("Invalid mode: "+modeName+" (valid modes: EMBOSS, ENGRAVE)")
+      self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, mode)
 
       # get fiducial positions as space-separated list
       import numpy
-      n = segmentMarkupNode.GetNumberOfFiducials()
+      n = segmentMarkupNode.GetNumberOfControlPoints()
       fPos = []
       for i in range(n):
         coord = [0.0, 0.0, 0.0]
-        segmentMarkupNode.GetNthFiducialPosition(i, coord)
+        segmentMarkupNode.GetNthControlPointPosition(i, coord)
         fPos.extend(coord)
       fPosString = ' '.join(map(str, fPos))
 
       segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      segment.SetTag("SurfaceCutEffectMarkupPositions", fPosString)
+      segment.SetTag("EngraveEffectMarkupPositions", fPosString)
