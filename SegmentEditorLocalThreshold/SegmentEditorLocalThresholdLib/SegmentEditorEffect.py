@@ -365,37 +365,10 @@ Fill segment in a selected region based on master volume intensity range<br>.
     parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
     roiNode = self.roiSelector.currentNode()
-    clippedMasterImageData = masterImageData
     if roiNode is not None:
-      worldToImageMatrix = vtk.vtkMatrix4x4()
-      masterImageData.GetWorldToImageMatrix(worldToImageMatrix)
-
-      bounds = [0,0,0,0,0,0]
-      roiNode.GetRASBounds(bounds)
-      corner1RAS = [bounds[0], bounds[2], bounds[4], 1]
-      corner1IJK = [0, 0, 0, 0]
-      worldToImageMatrix.MultiplyPoint(corner1RAS, corner1IJK)
-
-      corner2RAS = [bounds[1], bounds[3], bounds[5], 1]
-      corner2IJK = [0, 0, 0, 0]
-      worldToImageMatrix.MultiplyPoint(corner2RAS, corner2IJK)
-
-      extent = [0, -1, 0, -1, 0, -1]
-      for i in range(3):
-          lowerPoint = min(corner1IJK[i], corner2IJK[i])
-          upperPoint = max(corner1IJK[i], corner2IJK[i])
-          extent[2*i] = int(math.floor(lowerPoint))
-          extent[2*i+1] = int(math.ceil(upperPoint))
-
-      imageToWorldMatrix = vtk.vtkMatrix4x4()
-      masterImageData.GetImageToWorldMatrix(imageToWorldMatrix)
-      clippedMasterImageData = slicer.vtkOrientedImageData()
-      self.padder = vtk.vtkImageConstantPad()
-      self.padder.SetInputData(masterImageData)
-      self.padder.SetOutputWholeExtent(extent)
-      self.padder.Update()
-      clippedMasterImageData.ShallowCopy(self.padder.GetOutput())
-      clippedMasterImageData.SetImageToWorldMatrix(imageToWorldMatrix)
+      clippedMasterImageData = SegmentEditorEffect.cropOrientedImage(masterImageData, roiNode)
+    else:
+      clippedMasterImageData = masterImageData
 
     # Pipeline
     self.thresh = vtk.vtkImageThreshold()
@@ -562,6 +535,45 @@ Fill segment in a selected region based on master volume intensity range<br>.
     minimumDiameterMm = abs(self.scriptedEffect.doubleParameter(MINIMUM_DIAMETER_MM_PARAMETER_NAME))
     kernelSizePixel = [int(round((minimumDiameterMm / selectedSegmentLabelmapSpacing[componentIndex]+1)/2)*2-1) for componentIndex in range(3)]
     return kernelSizePixel
+
+  @staticmethod
+  def cropOrientedImage(masterImageData, roiNode):
+    """Clip master image data with annotation ROI and return result in a new vtkOrientedImageData"""
+    # This is a utility function, also used in FloodFilling effect.
+    # Probably we should apply relative transform between ROI and master image data node
+
+    worldToImageMatrix = vtk.vtkMatrix4x4()
+    masterImageData.GetWorldToImageMatrix(worldToImageMatrix)
+
+    bounds = [0,0,0,0,0,0]
+    roiNode.GetRASBounds(bounds)
+    corner1RAS = [bounds[0], bounds[2], bounds[4], 1]
+    corner1IJK = [0, 0, 0, 0]
+    worldToImageMatrix.MultiplyPoint(corner1RAS, corner1IJK)
+
+    corner2RAS = [bounds[1], bounds[3], bounds[5], 1]
+    corner2IJK = [0, 0, 0, 0]
+    worldToImageMatrix.MultiplyPoint(corner2RAS, corner2IJK)
+
+    extent = [0, -1, 0, -1, 0, -1]
+    for i in range(3):
+        lowerPoint = min(corner1IJK[i], corner2IJK[i])
+        upperPoint = max(corner1IJK[i], corner2IJK[i])
+        extent[2*i] = int(math.floor(lowerPoint))
+        extent[2*i+1] = int(math.ceil(upperPoint))
+
+    imageToWorldMatrix = vtk.vtkMatrix4x4()
+    masterImageData.GetImageToWorldMatrix(imageToWorldMatrix)
+    clippedMasterImageData = slicer.vtkOrientedImageData()
+    padder = vtk.vtkImageConstantPad()
+    padder.SetInputData(masterImageData)
+    padder.SetOutputWholeExtent(extent)
+    padder.Update()
+    clippedMasterImageData.ShallowCopy(padder.GetOutput())
+    clippedMasterImageData.SetImageToWorldMatrix(imageToWorldMatrix)
+
+    return clippedMasterImageData
+
 
 MINIMUM_DIAMETER_MM_PARAMETER_NAME = "MinimumDiameterMm"
 FEATURE_SIZE_MM_PARAMETER_NAME = "FeatureSizeMm"
