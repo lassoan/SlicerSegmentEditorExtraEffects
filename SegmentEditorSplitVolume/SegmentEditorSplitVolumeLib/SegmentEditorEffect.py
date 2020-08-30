@@ -133,6 +133,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     volumesLogic = slicer.modules.volumes.logic()
     scene = inputVolume.GetScene()
     padExtent = [-self.padEdit.value, self.padEdit.value, -self.padEdit.value, self.padEdit.value, -self.padEdit.value, self.padEdit.value]
+    fillValue = self.fillValueEdit.value
     
     # Create a new folder in subject hierarchy where all the generated volumes will be placed into
     shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene) 
@@ -152,7 +153,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
       
       # Crop segment
       maskExtent = [0] * 6
-      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [0], inputVolume, outputVolume, maskExtent)
+      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [fillValue], inputVolume, outputVolume, maskExtent)
       
       # Calculate padded extent of segment
       extent = [0] * 6
@@ -168,7 +169,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
       # Pad and crop
       padFilter = vtk.vtkImageConstantPad()
       padFilter.SetInputData(outputVolume.GetImageData())
-      padFilter.SetConstant(self.fillValueEdit.value)
+      padFilter.SetConstant(fillValue)
       padFilter.SetOutputWholeExtent(extent)
       padFilter.Update()
       paddedImg = padFilter.GetOutput()
