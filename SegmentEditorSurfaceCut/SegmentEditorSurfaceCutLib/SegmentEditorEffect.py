@@ -327,6 +327,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.segmentMarkupNode is None:
       displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
       displayNode.SetTextScale(0)
+      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
+        # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
+        # towards the camera as the point is moved.
+        displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
       self.segmentMarkupNode.SetName('C')
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
@@ -427,7 +431,7 @@ class SurfaceCutLogic(object):
     else:
       modelDisplayNode.SliceIntersectionVisibilityOn()
     modelDisplayNode.SetSliceIntersectionThickness(4)
-    modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
+    modelDisplayNode.SetOpacity(0.6)  # Between 0-1, 1 being opaque
 
   def updateModelFromMarkup(self, inputMarkup, outputModel, smoothModelFlag=True):
     """
