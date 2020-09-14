@@ -177,7 +177,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      self.editButton.setVisible(segment.HasTag("DrawTubeEffectMarkupPositions"))
+      if segment:
+        self.editButton.setVisible(segment.HasTag("DrawTubeEffectMarkupPositions"))
 
     interpolationName = self.scriptedEffect.parameter("Interpolation")
     interpolationButton = list(self.buttonToInterpolationTypeMap.keys())[list(self.buttonToInterpolationTypeMap.values()).index(interpolationName)]
@@ -230,12 +231,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       displayNode = segmentationNode.GetDisplayNode()
       if displayNode is None:
         logging.error("preview: Invalid segmentation display node!")
-        color = [0.5, 0.5, 0.5]
       if self.segmentModel.GetDisplayNode():
         segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-        r, g, b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-        if (r,g,b) != self.segmentModel.GetDisplayNode().GetColor():
-          self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
+        if segmentID:
+          segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
+          if segment:
+            r, g, b = segment.GetColor()
+            if (r,g,b) != self.segmentModel.GetDisplayNode().GetColor():
+              self.segmentModel.GetDisplayNode().SetColor(r, g, b)  # Edited segment color
 
   def onCancel(self):
     self.reset()
