@@ -175,7 +175,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      self.editButton.setVisible(segment.HasTag("EngraveEffectMarkupPositions"))
+      if segment:
+        self.editButton.setVisible(segment.HasTag("EngraveEffectMarkupPositions"))
 
     modeName = self.scriptedEffect.parameter("Mode")
     modeButton = list(self.buttonToModeTypeMap.keys())[list(self.buttonToModeTypeMap.values()).index(modeName)]
