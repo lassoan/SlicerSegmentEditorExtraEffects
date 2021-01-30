@@ -126,7 +126,14 @@ Generated volumes are not affected by segmentation undo/redo operations.
     return inputVolume
   
   def onApply(self):
-    import SegmentEditorMaskVolumeLib
+    import SegmentEditorEffects
+    if not hasattr(SegmentEditorEffects,'SegmentEditorMaskVolumeEffect'):
+      # Slicer 4.11 and earlier - Mask volume is in an extension
+      import SegmentEditorMaskVolumeLib
+      maskVolumeWithSegment = SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment
+    else:
+      maskVolumeWithSegment = SegmentEditorEffects.SegmentEditorMaskVolumeEffect.maskVolumeWithSegment
+
     inputVolume = self.getInputVolume()
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -153,7 +160,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
       
       # Crop segment
       maskExtent = [0] * 6
-      SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [fillValue], inputVolume, outputVolume, maskExtent)
+      maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [fillValue], inputVolume, outputVolume, maskExtent)
       
       # Calculate padded extent of segment
       extent = [0] * 6

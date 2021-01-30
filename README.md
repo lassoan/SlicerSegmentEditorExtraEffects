@@ -21,6 +21,7 @@ Add to the current segment all similar intensity voxels near the clicked positio
 ## Mask Volume
 
 Fill a scalar volume with constant value inside/outside the selected segment.
+The effect was moved to Slicer core in Slicer-4.13.
 
 ## Split Volume
 

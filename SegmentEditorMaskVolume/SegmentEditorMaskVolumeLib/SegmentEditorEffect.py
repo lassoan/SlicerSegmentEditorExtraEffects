@@ -13,6 +13,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def __init__(self, scriptedEffect):
     scriptedEffect.name = 'Mask volume'
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
+    self.updatingGUIFromMRML = False
+    self.visibleIcon = qt.QIcon(":/Icons/Small/SlicerVisible.png")
+    self.invisibleIcon = qt.QIcon(":/Icons/Small/SlicerInvisible.png")
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
 
     #Effect-specific members
@@ -63,28 +66,25 @@ modifiable.
     self.scriptedEffect.addLabeledOptionsWidget("Operation:", operationLayout)
 
     # fill value
-    self.fillValueEdit = qt.QSpinBox()
+    self.fillValueEdit = ctk.ctkDoubleSpinBox()
     self.fillValueEdit.setToolTip("Choose the voxel intensity that will be used to fill the masked region.")
-    self.fillValueEdit.minimum = -32768
-    self.fillValueEdit.maximum = 65535
-    self.fillValueEdit.connect("valueChanged(int)", self.fillValueChanged)
     self.fillValueLabel = qt.QLabel("Fill value: ")
 
     # Binary mask fill outside value
-    self.binaryMaskFillOutsideEdit = qt.QSpinBox()
+    self.binaryMaskFillOutsideEdit = ctk.ctkDoubleSpinBox()
     self.binaryMaskFillOutsideEdit.setToolTip("Choose the voxel intensity that will be used to fill outside the mask.")
-    self.binaryMaskFillOutsideEdit.minimum = -32768
-    self.binaryMaskFillOutsideEdit.maximum = 65535
-    self.binaryMaskFillOutsideEdit.connect("valueChanged(int)", self.fillValueChanged)
     self.fillOutsideLabel = qt.QLabel("Outside fill value: ")
 
     # Binary mask fill outside value
-    self.binaryMaskFillInsideEdit = qt.QSpinBox()
+    self.binaryMaskFillInsideEdit = ctk.ctkDoubleSpinBox()
     self.binaryMaskFillInsideEdit.setToolTip("Choose the voxel intensity that will be used to fill inside the mask.")
-    self.binaryMaskFillInsideEdit.minimum = -32768
-    self.binaryMaskFillInsideEdit.maximum = 65535
-    self.binaryMaskFillInsideEdit.connect("valueChanged(int)", self.fillValueChanged)
     self.fillInsideLabel = qt.QLabel(" Inside fill value: ")
+
+    for fillValueEdit in [self.fillValueEdit, self.binaryMaskFillOutsideEdit, self.binaryMaskFillInsideEdit]:
+      fillValueEdit.decimalsOption = ctk.ctkDoubleSpinBox.DecimalsByValue + ctk.ctkDoubleSpinBox.DecimalsByKey + ctk.ctkDoubleSpinBox.InsertDecimals
+      fillValueEdit.minimum = vtk.vtkDoubleArray().GetDataTypeMin(vtk.VTK_DOUBLE)
+      fillValueEdit.maximum = vtk.vtkDoubleArray().GetDataTypeMax(vtk.VTK_DOUBLE)
+      fillValueEdit.connect("valueChanged(double)", self.fillValueChanged)
 
     # Fill value layouts
     fillValueLayout = qt.QFormLayout()
@@ -118,9 +118,7 @@ modifiable.
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
 
     self.inputVisibilityButton = qt.QToolButton()
-    self.inputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
-    self.inputVisibilityButton.setAutoRaise(True)
-    self.inputVisibilityButton.setCheckable(True)
+    self.inputVisibilityButton.setIcon(self.invisibleIcon)
     self.inputVisibilityButton.connect('clicked()', self.onInputVisibilityButtonClicked)
     inputLayout = qt.QHBoxLayout()
     inputLayout.addWidget(self.inputVisibilityButton)
@@ -142,9 +140,7 @@ modifiable.
     self.outputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputVolumeChanged)
 
     self.outputVisibilityButton = qt.QToolButton()
-    self.outputVisibilityButton.setIcon(qt.QIcon(":/Icons/Small/SlicerInvisible.png"))
-    self.outputVisibilityButton.setAutoRaise(True)
-    self.outputVisibilityButton.setCheckable(True)
+    self.outputVisibilityButton.setIcon(self.invisibleIcon)
     self.outputVisibilityButton.connect('clicked()', self.onOutputVisibilityButtonClicked)
     outputLayout = qt.QHBoxLayout()
     outputLayout.addWidget(self.outputVisibilityButton)
@@ -171,54 +167,67 @@ modifiable.
     self.scriptedEffect.setParameterDefault("BinaryMaskFillValueInside", "1")
     self.scriptedEffect.setParameterDefault("BinaryMaskFillValueOutside", "0")
     self.scriptedEffect.setParameterDefault("Operation", "FILL_OUTSIDE")
-    self.scriptedEffect.setParameterDefault("InputVisibility", "True")
-    self.scriptedEffect.setParameterDefault("OutputVisibility", "False")
+
+  def isVolumeVisible(self, volumeNode):
+    if not volumeNode:
+      return False
+    volumeNodeID = volumeNode.GetID()
+    lm = slicer.app.layoutManager()
+    sliceViewNames = lm.sliceViewNames()
+    for sliceViewName in sliceViewNames:
+        sliceWidget = lm.sliceWidget(sliceViewName)
+        if volumeNodeID == sliceWidget.mrmlSliceCompositeNode().GetBackgroundVolumeID():
+          return True
+    return False
 
   def updateGUIFromMRML(self):
-    self.fillValueEdit.setValue(float(self.scriptedEffect.parameter("FillValue")))
-    self.binaryMaskFillOutsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueOutside")))
-    self.binaryMaskFillInsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueInside")))
+    self.updatingGUIFromMRML = True
+
+    self.fillValueEdit.setValue(float(self.scriptedEffect.parameter("FillValue")) if self.scriptedEffect.parameter("FillValue") else 0)
+    self.binaryMaskFillOutsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueOutside")) if self.scriptedEffect.parameter("BinaryMaskFillValueOutside") else 0)
+    self.binaryMaskFillInsideEdit.setValue(float(self.scriptedEffect.parameter("BinaryMaskFillValueInside")) if self.scriptedEffect.parameter("BinaryMaskFillValueInside") else 1)
     operationName = self.scriptedEffect.parameter("Operation")
-    operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
-    operationButton.setChecked(True)
+    if operationName:
+      operationButton = list(self.buttonToOperationNameMap.keys())[list(self.buttonToOperationNameMap.values()).index(operationName)]
+      operationButton.setChecked(True)
 
-    inputVisible = self.scriptedEffect.parameter("InputVisibility")
-    outputVisible = self.scriptedEffect.parameter("OutputVisibility")
-    inputVolume = self.inputVolumeSelector.currentNode()
-    if inputVolume is None:
-      inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
-    outputVolume = self.outputVolumeSelector.currentNode()
+    inputVolume = self.scriptedEffect.parameterSetNode().GetNodeReference("Mask volume.InputVolume")
+    self.inputVolumeSelector.setCurrentNode(inputVolume)
+    outputVolume = self.scriptedEffect.parameterSetNode().GetNodeReference("Mask volume.OutputVolume")
+    self.outputVolumeSelector.setCurrentNode(outputVolume)
+
     masterVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
-    visibleIcon = qt.QIcon(":/Icons/Small/SlicerVisible.png")
-    invisibleIcon = qt.QIcon(":/Icons/Small/SlicerInvisible.png")
-    if inputVisible == "True" and outputVisible == "True":
-      self.inputVisibilityButton.setIcon(visibleIcon)
-      self.outputVisibilityButton.setIcon(visibleIcon)
-      slicer.util.setSliceViewerLayers(background=inputVolume)
-    elif inputVisible == "True":
-      self.inputVisibilityButton.setIcon(visibleIcon)
-      self.outputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=inputVolume)
-    elif outputVisible == "True":
-      self.outputVisibilityButton.setIcon(visibleIcon)
-      self.inputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=outputVolume)
+    if inputVolume is None:
+      inputVolume = masterVolume
+
+    self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
+    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillInsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    self.fillOutsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
+    if operationName in ["FILL_INSIDE", "FILL_OUTSIDE"]:
+      if self.outputVolumeSelector.noneDisplay != "(Create new Volume)":
+        self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
+        self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
     else:
-      self.outputVisibilityButton.setIcon(invisibleIcon)
-      self.inputVisibilityButton.setIcon(invisibleIcon)
-      slicer.util.setSliceViewerLayers(background=masterVolume)
-      self.inputVisibilityButton.setEnabled(False)
+      if self.outputVolumeSelector.noneDisplay != "(Create new Labelmap Volume)":
+        self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
+        self.outputVolumeSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode", "vtkMRMLScalarVolumeNode"]
 
-    self.inputVisibilityButton.setEnabled(not(inputVolume is masterVolume and inputVisible == "True"))
-    self.outputVisibilityButton.setEnabled(not((outputVolume is masterVolume and outputVisible == "True") or outputVolume is None))
+    self.inputVisibilityButton.setIcon(self.visibleIcon if self.isVolumeVisible(inputVolume) else self.invisibleIcon)
+    self.outputVisibilityButton.setIcon(self.visibleIcon if self.isVolumeVisible(outputVolume) else self.invisibleIcon)
 
-    self.inputVisibilityButton.setChecked(self.inputVisibilityButton.isEnabled() and inputVisible == "True")
-    self.outputVisibilityButton.setChecked(self.outputVisibilityButton.isEnabled() and outputVisible == "True")
+    self.updatingGUIFromMRML = False
 
   def updateMRMLFromGUI(self):
+    if self.updatingGUIFromMRML:
+      return
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("BinaryMaskFillValueInside", self.binaryMaskFillInsideEdit.value)
     self.scriptedEffect.setParameter("BinaryMaskFillValueOutside", self.binaryMaskFillOutsideEdit.value)
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("Mask volume.InputVolume", self.inputVolumeSelector.currentNodeID)
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("Mask volume.OutputVolume", self.outputVolumeSelector.currentNodeID)
 
   def activate(self):
     self.scriptedEffect.setParameter("InputVisibility", "True")
@@ -231,23 +240,7 @@ modifiable.
   def onOperationSelectionChanged(self, operationName, toggle):
     if not toggle:
       return
-    self.fillValueEdit.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
-    self.fillValueLabel.setVisible(operationName in ["FILL_INSIDE", "FILL_OUTSIDE"])
-    self.binaryMaskFillInsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
-    self.fillInsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
-    self.binaryMaskFillOutsideEdit.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
-    self.fillOutsideLabel.setVisible(operationName == "FILL_INSIDE_AND_OUTSIDE")
     self.scriptedEffect.setParameter("Operation", operationName)
-    if operationName in ["FILL_INSIDE", "FILL_OUTSIDE"]:
-      if self.outputVolumeSelector.noneDisplay != "(Create new Volume)":
-        self.outputVolumeSelector.noneDisplay = "(Create new Volume)"
-        self.outputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode", "vtkMRMLLabelMapVolumeNode"]
-        self.outputVolumeSelector.setCurrentNode(None)
-    else:
-      if self.outputVolumeSelector.noneDisplay != "(Create new Labelmap Volume)":
-        self.outputVolumeSelector.noneDisplay = "(Create new Labelmap Volume)"
-        self.outputVolumeSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode", "vtkMRMLScalarVolumeNode"]
-        self.outputVolumeSelector.setCurrentNode(None)
 
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
@@ -256,66 +249,27 @@ modifiable.
     return inputVolume
 
   def onInputVisibilityButtonClicked(self):
-    if self.inputVisibilityButton.isEnabled():
-      if self.inputVisibilityButton.isChecked():
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-        if self.outputVolumeSelector.currentNode() is self.getInputVolume():
-          self.scriptedEffect.setParameter("OutputVisibility", "True")
-        elif self.scriptedEffect.parameter("OutputVisibility") == "True":
-          self.scriptedEffect.setParameter("OutputVisibility", "False")
-      else:
-        self.scriptedEffect.setParameter("InputVisibility", "False")
-        if self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-          self.scriptedEffect.setParameter("OutputVisibility", "True")
-        elif self.outputVolumeSelector.currentNode() is self.getInputVolume():
-          self.scriptedEffect.setParameter("OutputVisibility", "False")
-    self.updateGUIFromMRML()
+    inputVolume = self.scriptedEffect.parameterSetNode().GetNodeReference("Mask volume.InputVolume")
+    masterVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+    if inputVolume is None:
+      inputVolume = masterVolume
+    if inputVolume:
+      slicer.util.setSliceViewerLayers(background=inputVolume)
+      self.updateGUIFromMRML()
 
   def onOutputVisibilityButtonClicked(self):
-    if self.outputVisibilityButton.isEnabled() and self.outputVolumeSelector.currentNode():
-      if self.outputVisibilityButton.isChecked():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        if self.getInputVolume() is self.outputVolumeSelector.currentNode():
-          self.scriptedEffect.setParameter("InputVisibility", "True")
-        elif self.scriptedEffect.parameter("InputVisibility") == "True":
-          self.scriptedEffect.setParameter("InputVisibility", "False")
-      else:
-        self.scriptedEffect.setParameter("OutputVisibility", "False")
-        if self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-          self.scriptedEffect.setParameter("InputVisibility", "True")
-        elif self.getInputVolume() is self.outputVolumeSelector.currentNode():
-          self.scriptedEffect.setParameter("InputVisibility", "False")
-    self.updateGUIFromMRML()
+    outputVolume = self.scriptedEffect.parameterSetNode().GetNodeReference("Mask volume.OutputVolume")
+    if outputVolume:
+      slicer.util.setSliceViewerLayers(background=outputVolume)
+      self.updateGUIFromMRML()
 
   def onInputVolumeChanged(self):
-    if self.getInputVolume() is self.outputVolumeSelector.currentNode():
-      if self.scriptedEffect.parameter("OutputVisibility") == "True":
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      else:
-        self.scriptedEffect.setParameter("InputVisibility", "False")
-    elif self.getInputVolume() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("OutputVisibility") == "False":
-      self.scriptedEffect.setParameter("InputVisibility", "True")
-    else:
-      self.scriptedEffect.setParameter("InputVisibility", "False")
-    self.updateGUIFromMRML()
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("Mask volume.InputVolume", self.inputVolumeSelector.currentNodeID)
+    self.updateGUIFromMRML()  # node reference changes are not observed, update GUI manually
 
   def onOutputVolumeChanged(self):
-    if self.outputVolumeSelector.currentNode() is self.getInputVolume():
-      if self.scriptedEffect.parameter("InputVisibility") == "True":
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-      elif self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode():
-        self.scriptedEffect.setParameter("OutputVisibility", "True")
-        self.scriptedEffect.setParameter("InputVisibility", "True")
-      else:
-        self.scriptedEffect.setParameter("OutputVisibility", "False")
-    elif self.outputVolumeSelector.currentNode() is self.scriptedEffect.parameterSetNode().GetMasterVolumeNode() and self.scriptedEffect.parameter("InputVisibility") == "False":
-      self.scriptedEffect.setParameter("OutputVisibility", "True")
-    else:
-      self.scriptedEffect.setParameter("OutputVisibility", "False")
-    self.updateGUIFromMRML()
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("Mask volume.OutputVolume", self.outputVolumeSelector.currentNodeID)
+    self.updateGUIFromMRML()  # node reference changes are not observed, update GUI manually
 
   def fillValueChanged(self):
     self.updateMRMLFromGUI()
@@ -346,7 +300,11 @@ modifiable.
 
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     SegmentEditorEffect.maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolume, outputVolume)
+
+    slicer.util.setSliceViewerLayers(background=outputVolume)
     qt.QApplication.restoreOverrideCursor()
+
+    self.updateGUIFromMRML()
 
   @staticmethod
   def maskVolumeWithSegment(segmentationNode, segmentID, operationMode, fillValues, inputVolumeNode, outputVolumeNode, maskExtent=None):
@@ -382,7 +340,6 @@ modifiable.
     maskToStencil.SetInputData(maskVolumeNode.GetImageData())
 
     stencil = vtk.vtkImageStencil()
-    maskExtent
 
     if operationMode == "FILL_INSIDE_AND_OUTSIDE":
       # Set input to constant value
