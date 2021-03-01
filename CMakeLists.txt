@@ -39,9 +39,9 @@ IF (Slicer_VERSION VERSION_GREATER_EQUAL 4.11)
   # Requires Slicer-4.11 or above
   add_subdirectory(SegmentEditorEngrave)
 ENDIF()
-IF (Slicer_VERSION VERSION_LESS 4.13)
-  # Slicer 4.13 and above has Mask volume effect built in
-  add_subdirectory(MaskVolume)
+IF (Slicer_VERSION VERSION_LESS 4.11)
+  # Latest Slicer 4.11 and above has Mask volume effect built in
+  add_subdirectory(SegmentEditorMaskVolume)
 ENDIF()
 ## NEXT_MODULE
 
