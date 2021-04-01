@@ -328,6 +328,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
       self.segmentModel.SetName("SegmentEditorDrawTubeModel")
 
+      self.segmentModel.SetSelectable(False)  # prevent picking (we don't want markups points to snap to the curve itself)
+
       modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
