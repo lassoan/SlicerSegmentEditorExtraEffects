@@ -22,6 +22,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.observedSegmentation = None
     self.segmentObserver = None
     self.buttonToOperationNameMap = {}
+    self.pointsBeingEdited = ""  # list of coordinates of points that were being edited when the effect was deactivated
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -142,7 +143,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.observeSegmentation(True)
     self.updateGUIFromMRML()
 
+    if self.pointsBeingEdited:
+      self.logic.setPointsFromString(self.segmentMarkupNode, self.pointsBeingEdited)
+
   def deactivate(self):
+    # Save points when the effect is deactivated to prevent the user from losing his work
+    self.pointsBeingEdited = self.logic.getPointsAsString(self.segmentMarkupNode)
+
     self.reset()
     self.observeSegmentation(False)
     self.setAndObserveSegmentEditorNode(None)
@@ -247,14 +254,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     fPosStr = vtk.mutable("")
     segment.GetTag("SurfaceCutEffectMarkupPositions", fPosStr)
-    # convert from space-separated list o fnumbers to 1D array
-    import numpy
-    fPos = numpy.fromstring(str(fPosStr), sep=' ')
-    # convert from 1D array (N*3) to 2D array (N,3)
-    fPosNum = int(len(fPos)/3)
-    fPos = fPos.reshape((fPosNum, 3))
-    for i in range(fPosNum):
-      self.segmentMarkupNode.AddFiducialFromArray(fPos[i])
+    self.logic.setPointsFromString(self, self.segmentMarkupNode, fPosStr)
 
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
@@ -452,6 +452,31 @@ class SurfaceCutLogic(object):
       else:
         displayNode.SetInterpolation(slicer.vtkMRMLDisplayNode.FlatInterpolation)
 
+  def setPointsFromString(self, segmentMarkupNode, fPosStr):
+    # convert from space-separated list o fnumbers to 1D array
+    import numpy
+    fPos = numpy.fromstring(str(fPosStr), sep=' ')
+    # convert from 1D array (N*3) to 2D array (N,3)
+    fPosNum = int(len(fPos)/3)
+    fPos = fPos.reshape((fPosNum, 3))
+    wasModified = segmentMarkupNode.StartModify()
+    segmentMarkupNode.RemoveAllControlPoints()
+    for i in range(fPosNum):
+      segmentMarkupNode.AddFiducialFromArray(fPos[i])
+    segmentMarkupNode.EndModify(wasModified)
+
+  def getPointsAsString(self, segmentMarkupNode):
+    # get fiducial positions as space-separated list
+    import numpy
+    n = segmentMarkupNode.GetNumberOfFiducials()
+    fPos = []
+    for i in range(n):
+      coord = [0.0, 0.0, 0.0]
+      segmentMarkupNode.GetNthFiducialPosition(i, coord)
+      fPos.extend(coord)
+    fPosString = ' '.join(map(str, fPos))
+    return fPosString
+
   def cutSurfaceWithModel(self, segmentMarkupNode, segmentModel):
 
     import vtkSegmentationCorePython as vtkSegmentationCore
@@ -540,16 +565,8 @@ class SurfaceCutLogic(object):
 
       self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, modMode)
 
-      # get fiducial positions as space-separated list
-      import numpy
-      n = segmentMarkupNode.GetNumberOfFiducials()
-      fPos = []
-      for i in range(n):
-        coord = [0.0, 0.0, 0.0]
-        segmentMarkupNode.GetNthFiducialPosition(i, coord)
-        fPos.extend(coord)
-      fPosString = ' '.join(map(str, fPos))
-
+      fPosString = self.getPointsAsString(segmentMarkupNode)
       segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       segment.SetTag("SurfaceCutEffectMarkupPositions", fPosString)
+
