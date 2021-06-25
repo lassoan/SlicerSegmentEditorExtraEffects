@@ -316,8 +316,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.segmentModel is None:
       self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
       self.segmentModel.SetName("SegmentEditorSurfaceCutModel")
+      self.segmentModel.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
 
       modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
+      modelDisplayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
@@ -330,12 +332,18 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
       displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
+      displayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       displayNode.SetTextScale(0)
       if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
         # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
         # towards the camera as the point is moved.
         displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+      self.segmentMarkupNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
+      # Prevent "Edit properties..." from being displayed
+      # (Edit properties would switch module, which would deactive the effect, thus remove the markups node
+      # while the markups node's event is being processed, causing a crash)
+      self.segmentMarkupNode.SetHideFromEditors(True)
       self.segmentMarkupNode.SetName('C')
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
