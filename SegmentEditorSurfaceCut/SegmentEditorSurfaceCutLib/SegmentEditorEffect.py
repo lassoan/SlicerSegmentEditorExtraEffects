@@ -254,7 +254,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     fPosStr = vtk.mutable("")
     segment.GetTag("SurfaceCutEffectMarkupPositions", fPosStr)
-    self.logic.setPointsFromString(self, self.segmentMarkupNode, fPosStr)
+    self.logic.setPointsFromString(self.segmentMarkupNode, fPosStr)
 
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
