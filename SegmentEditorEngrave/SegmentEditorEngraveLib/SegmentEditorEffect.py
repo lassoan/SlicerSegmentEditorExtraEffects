@@ -52,7 +52,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Fiducial Placement widget
     self.markupsPlacementToggle = slicer.qSlicerMarkupsPlaceWidget()
     self.markupsPlacementToggle.setMRMLScene(slicer.mrmlScene)
-    #self.markupsPlacementToggle.placeMultipleMarkups = self.markupsPlacementToggle.ForcePlaceMultipleMarkups
+    self.markupsPlacementToggle.placeMultipleMarkups = self.markupsPlacementToggle.ForcePlaceSingleMarkup
     self.markupsPlacementToggle.buttonsVisible = False
     self.markupsPlacementToggle.show()
     self.markupsPlacementToggle.placeButton().show()
@@ -170,6 +170,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.segmentMarkupNode:
       self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() is not 0)
       self.applyButton.setEnabled(self.getNumberOfDefinedControlPoints() >= 3)
+      # Prevent placing additional planes
+      self.markupsPlacementToggle.placeButton().setVisible(self.getNumberOfDefinedControlPoints() < 3)
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -256,14 +258,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     fPosStr = vtk.mutable("")
     segment.GetTag("EngraveEffectMarkupPositions", fPosStr)
-    # convert from space-separated list o fnumbers to 1D array
+    # convert from space-separated list of numbers to 1D array
     import numpy
     fPos = numpy.fromstring(str(fPosStr), sep=' ')
     # convert from 1D array (N*3) to 2D array (N,3)
     fPosNum = int(len(fPos)/3)
     fPos = fPos.reshape((fPosNum, 3))
     for i in range(fPosNum):
-      self.segmentMarkupNode.AddFiducialFromArray(fPos[i])
+      self.segmentMarkupNode.AddControlPoint(vtk.vtkVector3d(fPos[i]))
 
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
@@ -344,10 +346,13 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode", "E")
       self.segmentMarkupNode.CreateDefaultDisplayNodes()
       displayNode = self.segmentMarkupNode.GetDisplayNode()
+      # Do not show plane outline or fill, just control points, and then the positioning arrows
+      displayNode.SetPointLabelsVisibility(False)
+      displayNode.SetOutlineVisibility(False)
+      displayNode.SetFillVisibility(True)
+      displayNode.SetFillOpacity(0.3)
       displayNode.SetHandlesInteractive(True)
-      displayNode.SetOpacity(1.0)
 
-      #self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
 
@@ -402,19 +407,18 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def updateModelFromSegmentMarkupNode(self):
     if not self.segmentMarkupNode or not self.segmentModel:
       return
-    self.logic.updateModel(self.segmentMarkupNode, self.segmentModel, 
+    self.logic.updateModel(self.segmentMarkupNode, self.segmentModel,
       self.scriptedEffect.parameter("Text"),
       self.scriptedEffect.doubleParameter("TextDepth"),
       self.scriptedEffect.doubleParameter("TextHeight"))
 
     displayNode = self.segmentMarkupNode.GetDisplayNode()
     if displayNode:
-      if self.segmentMarkupNode.GetNumberOfControlPoints() < 3:
-        displayNode.SetHandlesInteractive(False)
-        displayNode.SetOpacity(1.0)
-      else:
-        displayNode.SetHandlesInteractive(True)
-        displayNode.SetOpacity(0.0)
+      planeFullyDefined = self.segmentMarkupNode.GetNumberOfDefinedControlPoints() >= 3
+      # only show control points while placing points
+      displayNode.SetOpacity(0.0 if planeFullyDefined else 1.0)
+      # only show interaction handles when the plane is fully defined
+      displayNode.SetHandlesInteractive(planeFullyDefined)
 
 
   def interactionNodeModified(self, interactionNode):
@@ -469,7 +473,10 @@ class EngraveLogic(object):
     self.vectorText.SetText(text)
 
     planeToWorldMatrix = vtk.vtkMatrix4x4()
-    inputMarkup.GetPlaneToWorldMatrix(planeToWorldMatrix)
+    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+      inputMarkup.GetObjectToWorldMatrix(planeToWorldMatrix)
+    else:
+      inputMarkup.GetPlaneToWorldMatrix(planeToWorldMatrix)
 
     # scale marker and translate to desired location on skirt
     self.scaleAndTranslateTransform.Identity()
