@@ -1,6 +1,11 @@
 # SlicerSegmentEditorExtraEffects
 
-Experimental effects for Segment Editor in 3D Slicer. These effects are kept here insted of distributed with Slicer because it is not yet clear if they are as good or better than existing effects or they are still in development and we want to allow more frequent updates.
+Experimental effects for Segment Editor in 3D Slicer. These effects are kept here insted of distributed with Slicer because for one or more of the following reasonds:
+- the effect has not proven to be sufficiently different or better then similar effects in Slicer core
+- the effect appears to be useful only for a small fraction of users: by having rarely needed effects separately makes it easier for new users to learn basic tools first
+- the effect is not complete or stable enough and so we want to distinguish them from the stable, well-tested effects in Slicer core
+- the effect still in development and we want to be able to be able to update them frequently, even in the Slicer Stable Release (the stable release is updated a few times a year, while extensions are updated every night)
+- the effect depends on modules provided by other extensions: Slicer core features cannot depend on extensions
 
 ## Draw Tube
 
