@@ -64,7 +64,7 @@ Masking settings can be used to restrict growing to a specific region.
 
     # Add ROI options
     self.roiSelector = slicer.qMRMLNodeComboBox()
-    self.roiSelector.nodeTypes = ['vtkMRMLAnnotationROINode']
+    self.roiSelector.nodeTypes = ['vtkMRMLMarkupsROINode', 'vtkMRMLAnnotationROINode']
     self.roiSelector.noneEnabled = True
     self.roiSelector.setMRMLScene(slicer.mrmlScene)
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
