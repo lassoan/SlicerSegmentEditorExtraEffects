@@ -2,11 +2,18 @@
 #-----------------------------------------------------------------------------
 set(MODULE_NAME SegmentEditorFastMarching)
 
+# vtkPichonFastMarching used to be in Slicer core but it was moved
+# to this extension in Slicer-4.13.
+if(${Slicer_VERSION_MAJOR}.${Slicer_VERSION_MINOR} VERSION_GREATER 4.11)
+  message(STATUS "Slicer version: ${Slicer_VERSION_MAJOR}.${Slicer_VERSION_MINOR}.${Slicer_VERSION_PATCH}. Building vtkPichonFastMarching locally.")
+  add_subdirectory(Logic)
+endif()
+
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
   ${MODULE_NAME}Lib/__init__.py
-  ${MODULE_NAME}Lib/SegmentEditorEffect.py 
+  ${MODULE_NAME}Lib/SegmentEditorEffect.py
   )
 
 set(MODULE_PYTHON_RESOURCES

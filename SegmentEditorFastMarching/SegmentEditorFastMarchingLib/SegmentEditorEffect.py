@@ -171,7 +171,11 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     # collect seeds
     dim = masterImageData.GetDimensions()
     # initialize the filter
-    self.fm = slicer.vtkPichonFastMarching()
+    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
+      import vtkSlicerSegmentEditorFastMarchingModuleLogicPython
+      self.fm = vtkSlicerSegmentEditorFastMarchingModuleLogicPython.vtkPichonFastMarching()
+    else:
+      self.fm = slicer.vtkPichonFastMarching()
     scalarRange = masterImageData.GetScalarRange()
     depth = scalarRange[1]-scalarRange[0]
 
