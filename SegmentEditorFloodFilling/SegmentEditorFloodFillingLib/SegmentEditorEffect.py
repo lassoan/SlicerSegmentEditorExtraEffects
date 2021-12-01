@@ -68,6 +68,7 @@ Masking settings can be used to restrict growing to a specific region.
     self.roiSelector.noneEnabled = True
     self.roiSelector.setMRMLScene(slicer.mrmlScene)
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
+    self.roiSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
 
   def createCursor(self, widget):
     # Turn off effect-specific cursor for this effect
@@ -115,6 +116,7 @@ Masking settings can be used to restrict growing to a specific region.
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("IntensityTolerance", 10.0)
     self.scriptedEffect.setParameterDefault("NeighborhoodSizeMm", 1.0)
+    self.scriptedEffect.setParameterDefault("ROINodeID", "")
 
   def updateGUIFromMRML(self):
     self.intensityToleranceSlider.blockSignals(True)
@@ -123,10 +125,14 @@ Masking settings can be used to restrict growing to a specific region.
     self.neighborhoodSizeMmSlider.blockSignals(True)
     self.neighborhoodSizeMmSlider.value = self.scriptedEffect.doubleParameter("NeighborhoodSizeMm")
     self.neighborhoodSizeMmSlider.blockSignals(False)
+    self.roiSelector.blockSignals(True)
+    self.roiSelector.setCurrentNodeID(self.scriptedEffect.parameter("ROINodeID"))
+    self.roiSelector.blockSignals(False)
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("IntensityTolerance", self.intensityToleranceSlider.value)
     self.scriptedEffect.setParameter("NeighborhoodSizeMm", self.neighborhoodSizeMmSlider.value)
+    self.scriptedEffect.setParameter("ROINodeID", self.roiSelector.currentNodeID)
 
   def getClippedMasterImageData(self):
     # Return masterImageData unchanged if there is no ROI
