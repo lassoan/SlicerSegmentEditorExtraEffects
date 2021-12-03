@@ -42,6 +42,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("FillValue", "0")
     self.scriptedEffect.setParameterDefault("PaddingVoxels", "5")
+    self.scriptedEffect.setParameterDefault("AllSegments", True)
 
   def updateGUIFromMRML(self):
     wasBlocked = self.fillValueEdit.blockSignals(True)
@@ -57,10 +58,22 @@ Generated volumes are not affected by segmentation undo/redo operations.
     except:
       self.padEdit.setValue(5)
     self.padEdit.blockSignals(wasBlocked)
+    
+    wasBlocked = self.allSegmentsCheckbox.blockSignals(True)
+    try:
+      checked = True if (self.scriptedEffect.parameter("AllSegments") == "True") else False
+      self.allSegmentsCheckbox.setChecked(checked)
+    except:
+      self.allSegmentsCheckbox.setChecked(True)
+    self.allSegmentsCheckbox.blockSignals(wasBlocked)
  
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("PaddingVoxels", self.padEdit.value)
+    self.scriptedEffect.setParameter("AllSegments", self.allSegmentsCheckbox.isChecked())
+    
+  def onAllSegmentsCheckboxStateChanged(self, newState):
+    self.scriptedEffect.setParameter("AllSegments", self.allSegmentsCheckbox.isChecked())
 
   def setupOptionsFrame(self):
      
@@ -106,7 +119,15 @@ Generated volumes are not affected by segmentation undo/redo operations.
     
     fillValueLayout = qt.QFormLayout()
     fillValueLayout.addRow(self.fillValueLabel, self.fillValueEdit)
-    self.scriptedEffect.addOptionsWidget(fillValueLayout)     
+    self.scriptedEffect.addOptionsWidget(fillValueLayout)
+    
+    # Segment scope checkbox layout
+    self.allSegmentsCheckbox = qt.QCheckBox()
+    self.allSegmentsCheckbox.setChecked(True)
+    self.allSegmentsCheckbox.setToolTip("Apply to all segments, or selected segment only.")
+    self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.allSegmentsCheckbox)
+    # Connection
+    self.allSegmentsCheckbox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
     
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
@@ -135,7 +156,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
       maskVolumeWithSegment = SegmentEditorEffects.SegmentEditorMaskVolumeEffect.maskVolumeWithSegment
 
     inputVolume = self.getInputVolume()
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    currentSegmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     volumesLogic = slicer.modules.volumes.logic()
     scene = inputVolume.GetScene()
@@ -151,6 +172,8 @@ Generated volumes are not affected by segmentation undo/redo operations.
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
     for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
       segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
+      if (not self.allSegmentsCheckbox.isChecked()) and (segmentID != currentSegmentID):
+          continue
       segmentIDs = vtk.vtkStringArray()
       segmentIDs.InsertNextValue(segmentID)
       
