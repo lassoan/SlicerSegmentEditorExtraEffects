@@ -34,7 +34,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """Create a volume node for each segment, cropped to the segment extent.\n
+    return """Create a volume node for each segment, or the selected segment only, cropped to the segment extent.\n
 Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
 Generated volumes are not affected by segmentation undo/redo operations.
 </html>"""
