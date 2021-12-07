@@ -116,7 +116,7 @@ Masking settings can be used to restrict growing to a specific region.
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("IntensityTolerance", 10.0)
     self.scriptedEffect.setParameterDefault("NeighborhoodSizeMm", 1.0)
-    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("ROINodeID", None)
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("FloodFilling.ROI", None)
 
   def updateGUIFromMRML(self):
     self.intensityToleranceSlider.blockSignals(True)
@@ -126,13 +126,13 @@ Masking settings can be used to restrict growing to a specific region.
     self.neighborhoodSizeMmSlider.value = self.scriptedEffect.doubleParameter("NeighborhoodSizeMm")
     self.neighborhoodSizeMmSlider.blockSignals(False)
     self.roiSelector.blockSignals(True)
-    self.roiSelector.setCurrentNode(self.scriptedEffect.parameterSetNode().GetNodeReference("ROINodeID"))
+    self.roiSelector.setCurrentNode(self.scriptedEffect.parameterSetNode().GetNodeReference("FloodFilling.ROI"))
     self.roiSelector.blockSignals(False)
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("IntensityTolerance", self.intensityToleranceSlider.value)
     self.scriptedEffect.setParameter("NeighborhoodSizeMm", self.neighborhoodSizeMmSlider.value)
-    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("ROINodeID", self.roiSelector.currentNodeID)
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID("FloodFilling.ROI", self.roiSelector.currentNodeID)
 
   def getClippedMasterImageData(self):
     # Return masterImageData unchanged if there is no ROI
