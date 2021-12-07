@@ -59,21 +59,21 @@ Generated volumes are not affected by segmentation undo/redo operations.
       self.padEdit.setValue(5)
     self.padEdit.blockSignals(wasBlocked)
     
-    wasBlocked = self.allSegmentsCheckbox.blockSignals(True)
+    wasBlocked = self.applyToAllVisibleSegmentsCheckBox.blockSignals(True)
     try:
       checked = True if (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") == 1) else False
-      self.allSegmentsCheckbox.setChecked(checked)
+      self.applyToAllVisibleSegmentsCheckBox.setChecked(checked)
     except:
-      self.allSegmentsCheckbox.setChecked(True)
-    self.allSegmentsCheckbox.blockSignals(wasBlocked)
+      self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
+    self.applyToAllVisibleSegmentsCheckBox.blockSignals(wasBlocked)
  
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("PaddingVoxels", self.padEdit.value)
-    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.allSegmentsCheckbox.isChecked()) else "0")
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
     
   def onAllSegmentsCheckboxStateChanged(self, newState):
-    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.allSegmentsCheckbox.isChecked()) else "0")
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
 
   def setupOptionsFrame(self):
      
@@ -122,12 +122,12 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.scriptedEffect.addOptionsWidget(fillValueLayout)
     
     # Segment scope checkbox layout
-    self.allSegmentsCheckbox = qt.QCheckBox()
-    self.allSegmentsCheckbox.setChecked(True)
-    self.allSegmentsCheckbox.setToolTip("Apply to all visible segments, or only the selected segment if it is visible.")
-    self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.allSegmentsCheckbox)
+    self.applyToAllVisibleSegmentsCheckBox = qt.QCheckBox()
+    self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
+    self.applyToAllVisibleSegmentsCheckBox.setToolTip("Apply to all visible segments, or only the selected segment if it is visible.")
+    self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.applyToAllVisibleSegmentsCheckBox)
     # Connection
-    self.allSegmentsCheckbox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
+    self.applyToAllVisibleSegmentsCheckBox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
     
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
@@ -174,7 +174,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     segmentationNode.GetDisplayNode().GetVisibleSegmentIDs(inputSegmentIDs)
     for segmentIndex in range(inputSegmentIDs.GetNumberOfValues()):
       segmentID = inputSegmentIDs.GetValue(segmentIndex)
-      if (not self.allSegmentsCheckbox.isChecked()) and (segmentID != currentSegmentID):
+      if (not self.applyToAllVisibleSegmentsCheckBox.isChecked()) and (segmentID != currentSegmentID):
           continue
       segmentIDs = vtk.vtkStringArray()
       segmentIDs.InsertNextValue(segmentID)
