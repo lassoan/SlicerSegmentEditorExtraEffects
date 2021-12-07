@@ -42,7 +42,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("FillValue", "0")
     self.scriptedEffect.setParameterDefault("PaddingVoxels", "5")
-    self.scriptedEffect.setParameterDefault("AllSegments", True)
+    self.scriptedEffect.setParameterDefault("ApplyToAllVisibleSegments", True)
 
   def updateGUIFromMRML(self):
     wasBlocked = self.fillValueEdit.blockSignals(True)
@@ -61,7 +61,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     
     wasBlocked = self.allSegmentsCheckbox.blockSignals(True)
     try:
-      checked = True if (self.scriptedEffect.parameter("AllSegments") == "True") else False
+      checked = True if (self.scriptedEffect.parameter("ApplyToAllVisibleSegments") == "True") else False
       self.allSegmentsCheckbox.setChecked(checked)
     except:
       self.allSegmentsCheckbox.setChecked(True)
@@ -70,10 +70,10 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("PaddingVoxels", self.padEdit.value)
-    self.scriptedEffect.setParameter("AllSegments", self.allSegmentsCheckbox.isChecked())
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", self.allSegmentsCheckbox.isChecked())
     
   def onAllSegmentsCheckboxStateChanged(self, newState):
-    self.scriptedEffect.setParameter("AllSegments", self.allSegmentsCheckbox.isChecked())
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", self.allSegmentsCheckbox.isChecked())
 
   def setupOptionsFrame(self):
      
