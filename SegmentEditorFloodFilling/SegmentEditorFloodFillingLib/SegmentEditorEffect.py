@@ -119,15 +119,15 @@ Masking settings can be used to restrict growing to a specific region.
     self.scriptedEffect.parameterSetNode().SetNodeReferenceID("FloodFilling.ROI", None)
 
   def updateGUIFromMRML(self):
-    self.intensityToleranceSlider.blockSignals(True)
+    wasBlocked = self.intensityToleranceSlider.blockSignals(True)
     self.intensityToleranceSlider.value = self.scriptedEffect.doubleParameter("IntensityTolerance")
-    self.intensityToleranceSlider.blockSignals(False)
-    self.neighborhoodSizeMmSlider.blockSignals(True)
+    self.intensityToleranceSlider.blockSignals(wasBlocked)
+    wasBlocked = self.neighborhoodSizeMmSlider.blockSignals(True)
     self.neighborhoodSizeMmSlider.value = self.scriptedEffect.doubleParameter("NeighborhoodSizeMm")
-    self.neighborhoodSizeMmSlider.blockSignals(False)
-    self.roiSelector.blockSignals(True)
+    self.neighborhoodSizeMmSlider.blockSignals(wasBlocked)
+    wasBlocked = self.roiSelector.blockSignals(True)
     self.roiSelector.setCurrentNode(self.scriptedEffect.parameterSetNode().GetNodeReference("FloodFilling.ROI"))
-    self.roiSelector.blockSignals(False)
+    self.roiSelector.blockSignals(wasBlocked)
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("IntensityTolerance", self.intensityToleranceSlider.value)
