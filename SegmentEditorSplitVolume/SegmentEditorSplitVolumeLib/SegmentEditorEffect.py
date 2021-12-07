@@ -34,7 +34,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """Create a volume node for each segment, or the selected segment only, cropped to the segment extent.\n
+    return """Create a volume node for each visible segment, or only the selected visible segment, cropped to the segment extent.\n
 Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
 Generated volumes are not affected by segmentation undo/redo operations.
 </html>"""
@@ -124,7 +124,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     # Segment scope checkbox layout
     self.allSegmentsCheckbox = qt.QCheckBox()
     self.allSegmentsCheckbox.setChecked(True)
-    self.allSegmentsCheckbox.setToolTip("Apply to all segments, or selected segment only.")
+    self.allSegmentsCheckbox.setToolTip("Apply to all visible segments, or only the selected segment if it is visible.")
     self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.allSegmentsCheckbox)
     # Connection
     self.allSegmentsCheckbox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
@@ -168,10 +168,12 @@ Generated volumes are not affected by segmentation undo/redo operations.
     inputVolumeParentItem = shNode.GetItemParent(shNode.GetItemByDataNode(inputVolume))
     outputShFolder = shNode.CreateFolderItem(inputVolumeParentItem, inputVolume.GetName()+" split")
 
-    # Iterate over segments
+    # Iterate over visible segments
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-    for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
-      segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
+    inputSegmentIDs = vtk.vtkStringArray()
+    segmentationNode.GetDisplayNode().GetVisibleSegmentIDs(inputSegmentIDs)
+    for segmentIndex in range(inputSegmentIDs.GetNumberOfValues()):
+      segmentID = inputSegmentIDs.GetValue(segmentIndex)
       if (not self.allSegmentsCheckbox.isChecked()) and (segmentID != currentSegmentID):
           continue
       segmentIDs = vtk.vtkStringArray()
