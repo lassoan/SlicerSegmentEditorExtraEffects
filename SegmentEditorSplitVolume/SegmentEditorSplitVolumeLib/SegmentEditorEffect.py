@@ -34,7 +34,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """Create a volume node for each visible segment, or only the selected visible segment, cropped to the segment extent.\n
+    return """Create a volume node for each visible segment, or only the selected segment, cropped to the segment extent.\n
 Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
 Generated volumes are not affected by segmentation undo/redo operations.
 </html>"""
@@ -121,7 +121,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     # Segment scope checkbox layout
     self.applyToAllVisibleSegmentsCheckBox = qt.QCheckBox()
     self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
-    self.applyToAllVisibleSegmentsCheckBox.setToolTip("Apply to all visible segments, or only the selected segment if it is visible.")
+    self.applyToAllVisibleSegmentsCheckBox.setToolTip("Apply to all visible segments, or only the selected segment.")
     self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.applyToAllVisibleSegmentsCheckBox)
     # Connection
     self.applyToAllVisibleSegmentsCheckBox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
@@ -165,17 +165,18 @@ Generated volumes are not affected by segmentation undo/redo operations.
     inputVolumeParentItem = shNode.GetItemParent(shNode.GetItemByDataNode(inputVolume))
     outputShFolder = shNode.CreateFolderItem(inputVolumeParentItem, inputVolume.GetName()+" split")
 
-    # Iterate over visible segments
+    # Filter out visible segments, or only the selected segment, irrespective of its visibility.
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-    inputSegmentIDs = vtk.vtkStringArray()
-    segmentationNode.GetDisplayNode().GetVisibleSegmentIDs(inputSegmentIDs)
-    for segmentIndex in range(inputSegmentIDs.GetNumberOfValues()):
-      segmentID = inputSegmentIDs.GetValue(segmentIndex)
-      if (not self.applyToAllVisibleSegmentsCheckBox.isChecked()) and (segmentID != currentSegmentID):
-          continue
-      segmentIDs = vtk.vtkStringArray()
-      segmentIDs.InsertNextValue(segmentID)
-      
+    visibleSegmentIDs = vtk.vtkStringArray()
+    segmentationNode.GetDisplayNode().GetVisibleSegmentIDs(visibleSegmentIDs)
+    if (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0):
+        inputSegments = []
+        for segmentIndex in range(visibleSegmentIDs.GetNumberOfValues()):
+            inputSegments.append(visibleSegmentIDs.GetValue(segmentIndex))
+    else:
+        inputSegments = [currentSegmentID]
+    # Iterate over targeted segments
+    for segmentID in inputSegments:
       # Create volume for output
       outputVolumeName = inputVolume.GetName() + ' ' + segmentationNode.GetSegmentation().GetSegment(segmentID).GetName()
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
