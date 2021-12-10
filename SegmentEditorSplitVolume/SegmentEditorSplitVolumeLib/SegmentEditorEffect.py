@@ -60,11 +60,8 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.padEdit.blockSignals(wasBlocked)
     
     wasBlocked = self.applyToAllVisibleSegmentsCheckBox.blockSignals(True)
-    try:
-      checked = True if (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") == 1) else False
-      self.applyToAllVisibleSegmentsCheckBox.setChecked(checked)
-    except:
-      self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
+    checked = (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0) 
+    self.applyToAllVisibleSegmentsCheckBox.setChecked(checked)
     self.applyToAllVisibleSegmentsCheckBox.blockSignals(wasBlocked)
  
   def updateMRMLFromGUI(self):
