@@ -34,7 +34,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     return qt.QIcon()
  
   def helpText(self):
-    return """Create a volume node for each segment, cropped to the segment extent.\n
+    return """Create a volume node for each visible segment, or only the selected segment, cropped to the segment extent.\n
 Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
 Generated volumes are not affected by segmentation undo/redo operations.
 </html>"""
@@ -42,6 +42,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("FillValue", "0")
     self.scriptedEffect.setParameterDefault("PaddingVoxels", "5")
+    self.scriptedEffect.setParameterDefault("ApplyToAllVisibleSegments", "1")
 
   def updateGUIFromMRML(self):
     wasBlocked = self.fillValueEdit.blockSignals(True)
@@ -57,10 +58,19 @@ Generated volumes are not affected by segmentation undo/redo operations.
     except:
       self.padEdit.setValue(5)
     self.padEdit.blockSignals(wasBlocked)
+    
+    wasBlocked = self.applyToAllVisibleSegmentsCheckBox.blockSignals(True)
+    checked = (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0) 
+    self.applyToAllVisibleSegmentsCheckBox.setChecked(checked)
+    self.applyToAllVisibleSegmentsCheckBox.blockSignals(wasBlocked)
  
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("PaddingVoxels", self.padEdit.value)
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
+    
+  def onAllSegmentsCheckboxStateChanged(self, newState):
+    self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
 
   def setupOptionsFrame(self):
      
@@ -106,7 +116,15 @@ Generated volumes are not affected by segmentation undo/redo operations.
     
     fillValueLayout = qt.QFormLayout()
     fillValueLayout.addRow(self.fillValueLabel, self.fillValueEdit)
-    self.scriptedEffect.addOptionsWidget(fillValueLayout)     
+    self.scriptedEffect.addOptionsWidget(fillValueLayout)
+    
+    # Segment scope checkbox layout
+    self.applyToAllVisibleSegmentsCheckBox = qt.QCheckBox()
+    self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
+    self.applyToAllVisibleSegmentsCheckBox.setToolTip("Apply to all visible segments, or only the selected segment.")
+    self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.applyToAllVisibleSegmentsCheckBox)
+    # Connection
+    self.applyToAllVisibleSegmentsCheckBox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
     
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
@@ -135,7 +153,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
       maskVolumeWithSegment = SegmentEditorEffects.SegmentEditorMaskVolumeEffect.maskVolumeWithSegment
 
     inputVolume = self.getInputVolume()
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
+    currentSegmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     volumesLogic = slicer.modules.volumes.logic()
     scene = inputVolume.GetScene()
@@ -147,13 +165,18 @@ Generated volumes are not affected by segmentation undo/redo operations.
     inputVolumeParentItem = shNode.GetItemParent(shNode.GetItemByDataNode(inputVolume))
     outputShFolder = shNode.CreateFolderItem(inputVolumeParentItem, inputVolume.GetName()+" split")
 
-    # Iterate over segments
+    # Filter out visible segments, or only the selected segment, irrespective of its visibility.
     slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
-    for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
-      segmentID = segmentationNode.GetSegmentation().GetNthSegmentID(segmentIndex)
-      segmentIDs = vtk.vtkStringArray()
-      segmentIDs.InsertNextValue(segmentID)
-      
+    visibleSegmentIDs = vtk.vtkStringArray()
+    segmentationNode.GetDisplayNode().GetVisibleSegmentIDs(visibleSegmentIDs)
+    if (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0):
+        inputSegments = []
+        for segmentIndex in range(visibleSegmentIDs.GetNumberOfValues()):
+            inputSegments.append(visibleSegmentIDs.GetValue(segmentIndex))
+    else:
+        inputSegments = [currentSegmentID]
+    # Iterate over targeted segments
+    for segmentID in inputSegments:
       # Create volume for output
       outputVolumeName = inputVolume.GetName() + ' ' + segmentationNode.GetSegmentation().GetSegment(segmentID).GetName()
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
