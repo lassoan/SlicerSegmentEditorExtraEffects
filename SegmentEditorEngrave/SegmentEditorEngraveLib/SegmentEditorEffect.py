@@ -168,7 +168,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
 
     if self.segmentMarkupNode:
-      self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() is not 0)
+      self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() != 0)
       self.applyButton.setEnabled(self.getNumberOfDefinedControlPoints() >= 3)
       # Prevent placing additional planes
       self.markupsPlacementToggle.placeButton().setVisible(self.getNumberOfDefinedControlPoints() < 3)
@@ -231,7 +231,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.updateModelFromSegmentMarkupNode()
 
   def onSegmentModified(self, caller, event):
-    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfControlPoints() is not 0:
+    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfControlPoints() != 0:
       self.reset()
       # Create model node prior to markup node for display order
       self.createNewModelNode()
@@ -430,7 +430,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return 0
     return self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
 
-class EngraveLogic(object):
+class EngraveLogic:
 
   def __init__(self, scriptedEffect):
     self.scriptedEffect = scriptedEffect
@@ -512,14 +512,14 @@ class EngraveLogic(object):
     import vtkSegmentationCore
 
     if not segmentMarkupNode:
-      raise AttributeError("{}: segment markup node not set.".format(self.__class__.__name__))
+      raise AttributeError(f"{self.__class__.__name__}: segment markup node not set.")
     if not segmentModel:
-      raise AttributeError("{}: segment model not set.".format(self.__class__.__name__))
+      raise AttributeError(f"{self.__class__.__name__}: segment model not set.")
 
     if segmentMarkupNode and segmentModel.GetPolyData().GetNumberOfCells() > 0:
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
       if not segmentationNode:
-        raise AttributeError("{}: Segmentation node not set.".format(self.__class__.__name__))
+        raise AttributeError(f"{self.__class__.__name__}: Segmentation node not set.")
 
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       if not modifierLabelmap:
