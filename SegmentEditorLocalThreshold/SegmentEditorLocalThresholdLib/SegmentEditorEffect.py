@@ -208,7 +208,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
       self.kernelSizePixel.text = "feature too small"
       self.applyButton.setEnabled(False)
     else:
-      self.kernelSizePixel.text = "{0}x{1}x{2} pixels".format(abs(kernelSizePixel[0]), abs(kernelSizePixel[1]), abs(kernelSizePixel[2]))
+      self.kernelSizePixel.text = f"{abs(kernelSizePixel[0])}x{abs(kernelSizePixel[1])}x{abs(kernelSizePixel[2])} pixels"
       self.applyButton.setEnabled(True)
 
 

@@ -140,7 +140,7 @@ by replacing the segment with a uniform-thickness shell defined by the segment b
       self.kernelSizePixel.text = "too thin"
       self.applyButton.setEnabled(False)
     else:
-      self.kernelSizePixel.text = "{0}x{1}x{2} pixels".format(abs(kernelSizePixel[0]), abs(kernelSizePixel[1]), abs(kernelSizePixel[2]))
+      self.kernelSizePixel.text = f"{abs(kernelSizePixel[0])}x{abs(kernelSizePixel[1])}x{abs(kernelSizePixel[2])} pixels"
       self.applyButton.setEnabled(True)
 
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
