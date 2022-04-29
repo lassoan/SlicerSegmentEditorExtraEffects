@@ -117,7 +117,7 @@ class SegmentEditorDrawTubeTest(ScriptedLoadableModuleTest):
              [-17.163865662527982, 33.7411348180564, 17.500000000000007], [-14.200893276341674, 21.889245273311168, 17.500000000000007]]
 
     for p in points:
-      effect.self().segmentMarkupNode.AddFiducialFromArray(p)
+      effect.self().segmentMarkupNode.AddControlPoint(p)
 
     effect.self().onApply()
 
