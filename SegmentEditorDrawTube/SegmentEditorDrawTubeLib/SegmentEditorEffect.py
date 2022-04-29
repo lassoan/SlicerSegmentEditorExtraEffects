@@ -222,7 +222,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.updateModelFromSegmentMarkupNode()
 
   def onSegmentModified(self, caller, event):
-    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfFiducials() != 0:
+    if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfControlPoints() != 0:
       self.reset()
       # Create model node prior to markup node for display order
       self.createNewModelNode()
@@ -437,7 +437,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
         count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
       else:
-        count = self.segmentMarkupNode.GetNumberOfFiducials()
+        count = self.segmentMarkupNode.GetNumberOfControlPoints()
     return count
 
 class DrawTubeLogic:
@@ -500,17 +500,16 @@ class DrawTubeLogic:
     wasModified = segmentMarkupNode.StartModify()
     segmentMarkupNode.RemoveAllControlPoints()
     for i in range(fPosNum):
-      segmentMarkupNode.AddFiducialFromArray(fPos[i])
+      segmentMarkupNode.AddControlPoint(fPos[i])
     segmentMarkupNode.EndModify(wasModified)
 
   def getPointsAsString(self, segmentMarkupNode):
     # get fiducial positions as space-separated list
     import numpy
-    n = segmentMarkupNode.GetNumberOfFiducials()
+    n = segmentMarkupNode.GetNumberOfControlPoints()
     fPos = []
     for i in range(n):
-      coord = [0.0, 0.0, 0.0]
-      segmentMarkupNode.GetNthFiducialPosition(i, coord)
+      coord = segmentMarkupNode.GetNthControlPointPosition(i)
       fPos.extend(coord)
     fPosString = ' '.join(map(str, fPos))
     return fPosString

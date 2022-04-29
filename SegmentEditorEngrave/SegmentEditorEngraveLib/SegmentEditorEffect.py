@@ -76,7 +76,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.textHeightSlider.value = 10
     self.textHeightSlider.singleStep = 0.1
     self.textHeightSlider.pageStep = 1.0
-    self.textHeightLabel = self.scriptedEffect.addLabeledOptionsWidget("Text height:", self.textHeightSlider) 
+    self.textHeightLabel = self.scriptedEffect.addLabeledOptionsWidget("Text height:", self.textHeightSlider)
 
     # Text height slider
     self.textDepthSlider = ctk.ctkSliderWidget()
@@ -86,7 +86,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.textDepthSlider.value = 5
     self.textDepthSlider.singleStep = 0.1
     self.textDepthSlider.pageStep = 1.0
-    self.textDepthLabel = self.scriptedEffect.addLabeledOptionsWidget("Depth:", self.textDepthSlider) 
+    self.textDepthLabel = self.scriptedEffect.addLabeledOptionsWidget("Depth:", self.textDepthSlider)
 
     # Mode buttons
     self.engraveButton = qt.QRadioButton("Engrave")
@@ -161,7 +161,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameterDefault("Text", "Text")
     self.scriptedEffect.setParameterDefault("Mode", "ENGRAVE")
     self.scriptedEffect.setParameterDefault("TextDepth", 5.0)
-    self.scriptedEffect.setParameterDefault("TextHeight", 10.0) 
+    self.scriptedEffect.setParameterDefault("TextHeight", 10.0)
 
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
@@ -298,7 +298,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     self.observeSegmentation(False)
-    self.logic.apply(self.segmentMarkupNode, self.segmentModel, 
+    self.logic.apply(self.segmentMarkupNode, self.segmentModel,
       self.scriptedEffect.parameter("Text"),
       self.scriptedEffect.doubleParameter("TextDepth"),
       self.scriptedEffect.doubleParameter("TextHeight"),
@@ -595,8 +595,7 @@ class EngraveLogic:
       n = segmentMarkupNode.GetNumberOfControlPoints()
       fPos = []
       for i in range(n):
-        coord = [0.0, 0.0, 0.0]
-        segmentMarkupNode.GetNthControlPointPosition(i, coord)
+        coord = segmentMarkupNode.GetNthControlPointPosition(i)
         fPos.extend(coord)
       fPosString = ' '.join(map(str, fPos))
 
