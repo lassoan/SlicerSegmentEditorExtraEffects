@@ -43,7 +43,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def setupOptionsFrame(self):
     self.modeRadioButtons = []
 
-    # Text height slider
+    # Text line edit
     self.textLineEdit = qt.QLineEdit()
     self.textLineEdit.setToolTip("Text to be added")
     self.textLineEdit.text = "Text"
@@ -61,24 +61,31 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Edit surface button
     self.editButton = qt.QPushButton("Edit")
     self.editButton.objectName = self.__class__.__name__ + 'Edit'
-    self.editButton.setToolTip("Edit the previously placed group of fiducials.")
+    self.editButton.setToolTip("Edit the previously placed plane.")
 
     markupsActionLayout = qt.QHBoxLayout()
     markupsActionLayout.addWidget(self.markupsPlacementToggle)
     markupsActionLayout.addWidget(self.editButton)
     self.scriptedEffect.addLabeledOptionsWidget("Placement: ", markupsActionLayout)
 
-    # Text height slider
-    self.textHeightSlider = ctk.ctkSliderWidget()
-    self.textHeightSlider.setToolTip("Size scale of the text.")
-    self.textHeightSlider.minimum = 0.01
-    self.textHeightSlider.maximum = 100.0
-    self.textHeightSlider.value = 10
-    self.textHeightSlider.singleStep = 0.1
-    self.textHeightSlider.pageStep = 1.0
-    self.textHeightLabel = self.scriptedEffect.addLabeledOptionsWidget("Text height:", self.textHeightSlider)
+    # Resize button
+    self.interactionResizeButton = qt.QPushButton("Resize")
+    self.interactionResizeButton.objectName = self.__class__.__name__ + 'Resize'
+    self.interactionResizeButton.checkable = True
+    self.interactionResizeButton.setToolTip("Enable/disable resize of the text plane.")
 
-    # Text height slider
+    # Move button
+    self.interactionMoveButton = qt.QPushButton("Move")
+    self.interactionMoveButton.objectName = self.__class__.__name__ + 'Move'
+    self.interactionMoveButton.checkable = True
+    self.interactionMoveButton.setToolTip("Enable/disable translation and rotation of the text plane.")
+
+    interactionLayout = qt.QHBoxLayout()
+    interactionLayout.addWidget(self.interactionResizeButton)
+    interactionLayout.addWidget(self.interactionMoveButton)
+    self.scriptedEffect.addLabeledOptionsWidget("Interaction: ", interactionLayout)
+
+    # Text depth slider
     self.textDepthSlider = ctk.ctkSliderWidget()
     self.textDepthSlider.setToolTip("Thickness of the generated text.")
     self.textDepthSlider.minimum = 0.1
@@ -129,9 +136,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.cancelButton.connect('clicked()', self.onCancel)
     self.editButton.connect('clicked()', self.onEdit)
     self.markupsPlacementToggle.placeButton().clicked.connect(self.onmarkupsPlacementToggleChanged)
+    self.interactionResizeButton.connect('toggled(bool)', self.onInteractionResizeEnabled)
+    self.interactionMoveButton.connect('toggled(bool)', self.onInteractionMoveEnabled)
     self.textLineEdit.connect("textEdited(QString)", self.onTextChanged)
     self.textDepthSlider.connect('valueChanged(double)', self.onTextDepthChanged)
-    self.textHeightSlider.connect("valueChanged(double)", self.onTextHeightChanged)
 
   def activate(self):
     self.scriptedEffect.showEffectCursorInSliceView = False
@@ -161,7 +169,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameterDefault("Text", "Text")
     self.scriptedEffect.setParameterDefault("Mode", "ENGRAVE")
     self.scriptedEffect.setParameterDefault("TextDepth", 5.0)
-    self.scriptedEffect.setParameterDefault("TextHeight", 10.0)
 
   def updateGUIFromMRML(self):
     if slicer.mrmlScene.IsClosing():
@@ -169,16 +176,28 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     if self.segmentMarkupNode:
       self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() != 0)
-      self.applyButton.setEnabled(self.getNumberOfDefinedControlPoints() >= 3)
+      self.applyButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
+      self.interactionResizeButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
+      self.interactionMoveButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
+      segmentMarkupDisplayNode = self.segmentMarkupNode.GetDisplayNode()
+      if segmentMarkupDisplayNode:
+        wasBlocked = self.interactionResizeButton.blockSignals(True)
+        self.interactionResizeButton.checked = segmentMarkupDisplayNode.GetHandlesInteractive() and segmentMarkupDisplayNode.GetScaleHandleVisibility()
+        self.interactionResizeButton.blockSignals(wasBlocked)
+        wasBlocked = self.interactionMoveButton.blockSignals(True)
+        self.interactionMoveButton.checked = segmentMarkupDisplayNode.GetHandlesInteractive() and segmentMarkupDisplayNode.GetTranslationHandleVisibility()
+        self.interactionMoveButton.blockSignals(wasBlocked)
+
       # Prevent placing additional planes
-      self.markupsPlacementToggle.placeButton().setVisible(self.getNumberOfDefinedControlPoints() < 3)
+      self.markupsPlacementToggle.placeButton().setVisible(not self.segmentMarkupNode.GetIsPlaneValid())
+      segmentMarkupDisplayNode = self.segmentMarkupNode.GetDisplayNode()
 
     segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if segmentID and segmentationNode:
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
       if segment:
-        self.editButton.setVisible(segment.HasTag("EngraveEffectMarkupPositions"))
+        self.editButton.setVisible(segment.HasTag("EngraveEffectPlaneParameters"))
 
     modeName = self.scriptedEffect.parameter("Mode")
     modeButton = list(self.buttonToModeTypeMap.keys())[list(self.buttonToModeTypeMap.values()).index(modeName)]
@@ -192,10 +211,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     wasBlocked = self.textDepthSlider.blockSignals(True)
     self.textDepthSlider.value = self.scriptedEffect.doubleParameter("TextDepth")
     self.textDepthSlider.blockSignals(wasBlocked)
-
-    wasBlocked = self.textHeightSlider.blockSignals(True)
-    self.textHeightSlider.value = self.scriptedEffect.doubleParameter("TextHeight")
-    self.textHeightSlider.blockSignals(wasBlocked)
 
   #
   # Effect specific methods (the above ones are the API methods to override)
@@ -226,10 +241,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameter("TextDepth", depth)
     self.updateModelFromSegmentMarkupNode()
 
-  def onTextHeightChanged(self, height):
-    self.scriptedEffect.setParameter("TextHeight", height)
-    self.updateModelFromSegmentMarkupNode()
-
   def onSegmentModified(self, caller, event):
     if not self.editButton.isEnabled() and self.segmentMarkupNode.GetNumberOfControlPoints() != 0:
       self.reset()
@@ -257,15 +268,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
 
     fPosStr = vtk.mutable("")
-    segment.GetTag("EngraveEffectMarkupPositions", fPosStr)
+    segment.GetTag("EngraveEffectPlaneParameters", fPosStr)
     # convert from space-separated list of numbers to 1D array
     import numpy
-    fPos = numpy.fromstring(str(fPosStr), sep=' ')
-    # convert from 1D array (N*3) to 2D array (N,3)
-    fPosNum = int(len(fPos)/3)
-    fPos = fPos.reshape((fPosNum, 3))
-    for i in range(fPosNum):
-      self.segmentMarkupNode.AddControlPoint(vtk.vtkVector3d(fPos[i]))
+    planeParameters = numpy.fromstring(str(fPosStr), sep=' ')
+
+    if len(planeParameters) > 0:
+      self.segmentMarkupNode.SetOriginWorld(planeParameters[0:3])
+      self.segmentMarkupNode.SetAxesWorld(planeParameters[3:6], planeParameters[6:9], planeParameters[9:12])
+      self.segmentMarkupNode.SetPlaneBounds(planeParameters[12:16])
 
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
@@ -288,8 +299,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.setAndObserveSegmentMarkupNode(None)
 
   def onApply(self):
-    if self.getNumberOfDefinedControlPoints() < 3:
-      logging.warning("Cannot apply, segment markup node has less than 2 control points")
+    if not self.segmentMarkupNode.GetIsPlaneValid():
+      logging.warning("Cannot apply, plane is not defined")
       return
 
     # Allow users revert to this state by clicking Undo
@@ -301,7 +312,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.logic.apply(self.segmentMarkupNode, self.segmentModel,
       self.scriptedEffect.parameter("Text"),
       self.scriptedEffect.doubleParameter("TextDepth"),
-      self.scriptedEffect.doubleParameter("TextHeight"),
       self.scriptedEffect.parameter("Mode"))
     self.reset()
     # Create model node prior to markup node for display order
@@ -335,23 +345,25 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
+      self.segmentModel.SetSelectable(False) # prevent interference with markup placement
 
       self.segmentModel.GetDisplayNode().Visibility2DOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
-      #displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
-      #displayNode.SetTextScale(0)
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode", "E")
       self.segmentMarkupNode.CreateDefaultDisplayNodes()
+      self.segmentMarkupNode.SetPlaneType(slicer.vtkMRMLMarkupsPlaneNode.PlaneTypePointNormal)
+      self.segmentMarkupNode.SetPlaneBounds(-30, 30, -10, 10)
       displayNode = self.segmentMarkupNode.GetDisplayNode()
       # Do not show plane outline or fill, just control points, and then the positioning arrows
       displayNode.SetPointLabelsVisibility(False)
-      displayNode.SetOutlineVisibility(False)
+      displayNode.SetOutlineVisibility(True)
       displayNode.SetFillVisibility(True)
-      displayNode.SetFillOpacity(0.3)
+      displayNode.SetFillOpacity(0.2)
       displayNode.SetHandlesInteractive(True)
+      displayNode.SetSnapMode(slicer.vtkMRMLMarkupsDisplayNode.SnapModeToVisibleSurface)
 
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
@@ -377,11 +389,16 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
         eventIds = [ vtk.vtkCommand.ModifiedEvent ]
       for eventId in eventIds:
         self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
+      self.segmentMarkupNodeObservers.append(
+        self.segmentMarkupNode.AddObserver(slicer.vtkMRMLMarkupsNode.DisplayModifiedEvent, self.onSegmentMarkupDisplayNodeModified))
     # Update GUI
     self.updateModelFromSegmentMarkupNode()
 
   def onSegmentMarkupNodeModified(self, observer, eventid):
     self.updateModelFromSegmentMarkupNode()
+    self.updateGUIFromMRML()
+
+  def onSegmentMarkupDisplayNodeModified(self, observer, eventid):
     self.updateGUIFromMRML()
 
   def setAndObserveSegmentEditorNode(self, segmentEditorNode):
@@ -409,12 +426,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
     self.logic.updateModel(self.segmentMarkupNode, self.segmentModel,
       self.scriptedEffect.parameter("Text"),
-      self.scriptedEffect.doubleParameter("TextDepth"),
-      self.scriptedEffect.doubleParameter("TextHeight"))
+      self.scriptedEffect.doubleParameter("TextDepth"))
 
     displayNode = self.segmentMarkupNode.GetDisplayNode()
     if displayNode:
-      planeFullyDefined = self.segmentMarkupNode.GetNumberOfDefinedControlPoints() >= 3
+      planeFullyDefined = self.segmentMarkupNode.GetIsPlaneValid()
       # only show control points while placing points
       displayNode.SetOpacity(0.0 if planeFullyDefined else 1.0)
       # only show interaction handles when the plane is fully defined
@@ -429,6 +445,24 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if not self.segmentMarkupNode:
       return 0
     return self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
+
+  def onInteractionResizeEnabled(self, enable):
+    if not self.segmentMarkupNode or not self.segmentMarkupNode.GetDisplayNode():
+      return
+    segmentMarkupDisplayNode = self.segmentMarkupNode.GetDisplayNode()
+    if enable:
+      segmentMarkupDisplayNode.SetHandlesInteractive(True)
+    segmentMarkupDisplayNode.SetScaleHandleVisibility(enable)
+
+  def onInteractionMoveEnabled(self, enable):
+    if not self.segmentMarkupNode or not self.segmentMarkupNode.GetDisplayNode():
+      return
+    segmentMarkupDisplayNode = self.segmentMarkupNode.GetDisplayNode()
+    if enable:
+      segmentMarkupDisplayNode.SetHandlesInteractive(True)
+    segmentMarkupDisplayNode.SetTranslationHandleVisibility(enable)
+    segmentMarkupDisplayNode.SetRotationHandleVisibility(enable)
+
 
 class EngraveLogic:
 
@@ -460,13 +494,13 @@ class EngraveLogic:
     modelDisplayNode.SetSliceIntersectionThickness(2)
     modelDisplayNode.SetOpacity(1.0)  # Between 0-1, 1 being opaque
 
-  def updateModel(self, inputMarkup, outputModel, text, textDepth, textHeight):
+  def updateModel(self, inputMarkup, outputModel, text, textDepth):
 
     """
     Update model to enclose all points in the input markup list
     """
 
-    if inputMarkup.GetNumberOfControlPoints() < 3:
+    if not inputMarkup.GetIsPlaneValid():
       outputModel.SetAndObserveMesh(None)
       return
 
@@ -478,12 +512,18 @@ class EngraveLogic:
     else:
       inputMarkup.GetPlaneToWorldMatrix(planeToWorldMatrix)
 
+    self.vectorText.Update()
+    unscaledBounds = self.vectorText.GetOutput().GetBounds()
+    planeBounds = inputMarkup.GetPlaneBounds()
+    scale = [(planeBounds[1]-planeBounds[0])/(unscaledBounds[1]-unscaledBounds[0]),
+             (planeBounds[3]-planeBounds[2])/(unscaledBounds[3]-unscaledBounds[2]),
+             1]
+
     # scale marker and translate to desired location on skirt
     self.scaleAndTranslateTransform.Identity()
     self.scaleAndTranslateTransform.Concatenate(planeToWorldMatrix)
-    #self.scaleAndTranslateTransform.Translate(planePosition)
-    self.scaleAndTranslateTransform.Scale(textHeight, textHeight, 1)
-    #scaleAndTranslateTransform.Translate(-0.5, -0.5, 0)  # center the unit letter
+    self.scaleAndTranslateTransform.Translate(planeBounds[0], planeBounds[2], 0)
+    self.scaleAndTranslateTransform.Scale(scale)
     self.scaleAndTranslateTransform.Translate(0, 0, -textDepth/2.0)  # center the unit letter
 
     # extrude the marker to underside of valve
@@ -505,9 +545,9 @@ class EngraveLogic:
     outputModel.GetPolyData().DeepCopy(self.extrusion.GetOutput())
     slicer.app.resumeRender()
 
-  def apply(self, segmentMarkupNode, segmentModel, text, textDepth, textHeight, mode):
+  def apply(self, segmentMarkupNode, segmentModel, text, textDepth, mode):
 
-    self.updateModel(segmentMarkupNode, segmentModel, text, textDepth, textHeight)
+    self.updateModel(segmentMarkupNode, segmentModel, text, textDepth)
 
     import vtkSegmentationCore
 
@@ -590,15 +630,20 @@ class EngraveLogic:
         logging.error("Invalid mode: "+modeName+" (valid modes: EMBOSS, ENGRAVE)")
       self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, mode)
 
-      # get fiducial positions as space-separated list
-      import numpy
-      n = segmentMarkupNode.GetNumberOfControlPoints()
-      fPos = []
-      for i in range(n):
-        coord = segmentMarkupNode.GetNthControlPointPosition(i)
-        fPos.extend(coord)
-      fPosString = ' '.join(map(str, fPos))
+      # get plane parameters as space-separated string list
+      planeParameters = []
+      if segmentMarkupNode.GetIsPlaneValid():
+        planeParameters.extend(segmentMarkupNode.GetOriginWorld())
+        xAxis = [1, 0, 0]
+        yAxis = [0, 1, 0]
+        zAxis = [0, 0, 1]
+        segmentMarkupNode.GetAxesWorld(xAxis, yAxis, zAxis)
+        planeParameters.extend(xAxis)
+        planeParameters.extend(yAxis)
+        planeParameters.extend(zAxis)
+        planeParameters.extend(segmentMarkupNode.GetPlaneBounds())
+      planeParametersString = ' '.join(map(str, planeParameters))
 
       segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
       segment = segmentationNode.GetSegmentation().GetSegment(segmentID)
-      segment.SetTag("EngraveEffectMarkupPositions", fPosString)
+      segment.SetTag("EngraveEffectPlaneParameters", planeParametersString)
