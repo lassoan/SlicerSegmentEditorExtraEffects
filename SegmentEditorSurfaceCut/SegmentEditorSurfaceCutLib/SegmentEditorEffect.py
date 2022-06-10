@@ -345,11 +345,14 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       # while the markups node's event is being processed, causing a crash)
       self.segmentMarkupNode.SetHideFromEditors(True)
       # Only show "Delete point" action in view context menu to not allow the user to delete the node
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 13):
+      try:
         pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
         pluginLogic = pluginHandler.pluginLogic()
         itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
         pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
+      except AttributeError:
+        # pluginLogic.setAllowedViewContextMenuActionNamesForItem method is not yet available in this Slicer version
+        pass
       self.segmentMarkupNode.SetName('C')
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)

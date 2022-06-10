@@ -50,18 +50,18 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
 
   def setupOptionsFrame(self):
     AbstractScriptedSegmentEditorAutoCompleteEffect.setupOptionsFrame(self)
-  
+
      # Object scale slider
     self.objectScaleMmSlider = slicer.qMRMLSliderWidget()
     self.objectScaleMmSlider.setMRMLScene(slicer.mrmlScene)
     self.objectScaleMmSlider.quantity = "length" # get unit, precision, etc. from MRML unit node
-    self.objectScaleMmSlider.minimum = 0
+    self.objectScaleMmSlider.minimum = 0.0001  # object scale of 0 would throw an exception when calling sitk.GradientMagnitudeRecursiveGaussian
     self.objectScaleMmSlider.maximum = 10
     self.objectScaleMmSlider.value = 2.0
     self.objectScaleMmSlider.setToolTip('Increasing this value smooths the segmentation and reduces leaks. This is the sigma used for edge detection.')
     self.scriptedEffect.addLabeledOptionsWidget("Object scale:", self.objectScaleMmSlider)
-    self.objectScaleMmSlider.connect('valueChanged(double)', self.updateAlgorithmParameterFromGUI) 
-    
+    self.objectScaleMmSlider.connect('valueChanged(double)', self.updateAlgorithmParameterFromGUI)
+
   def setMRMLDefaults(self):
     AbstractScriptedSegmentEditorAutoCompleteEffect.setMRMLDefaults(self)
     self.scriptedEffect.setParameterDefault("ObjectScaleMm", 2.0)
@@ -79,31 +79,31 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
 
   def updateAlgorithmParameterFromGUI(self):
     self.updateMRMLFromGUI()
-    
-    # Trigger preview update    
+
+    # Trigger preview update
     if self.getPreviewNode():
       self.delayedAutoUpdateTimer.start()
-    
+
   def computePreviewLabelmap(self, mergedImage, outputLabelmap):
 
     import vtkSegmentationCorePython as vtkSegmentationCore
     import vtkSlicerSegmentationsModuleLogicPython as vtkSlicerSegmentationsModuleLogic
-  
+
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
     masterVolumeNode = slicer.vtkMRMLScalarVolumeNode()
     slicer.mrmlScene.AddNode(masterVolumeNode)
     slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(self.clippedMasterImageData, masterVolumeNode)
-        
+
     mergedLabelmapNode = slicer.vtkMRMLLabelMapVolumeNode()
     slicer.mrmlScene.AddNode(mergedLabelmapNode)
     slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(mergedImage, mergedLabelmapNode)
-    
+
     outputRasToIjk = vtk.vtkMatrix4x4()
     mergedImage.GetImageToWorldMatrix(outputRasToIjk)
     outputExtent = mergedImage.GetExtent()
-    
+
     # Run segmentation algorithm
     import SimpleITK as sitk
     import sitkUtils
@@ -123,7 +123,7 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
       labelImage = sitk.Cast(labelImage, sitk.sitkInt16)
     # Write result from SimpleITK to Slicer. This currently performs a deep copy of the bulk data.
     sitk.WriteImage(labelImage, sitkUtils.GetSlicerITKReadWriteAddress(mergedLabelmapNode.GetName()))
-    
+
     # Update segmentation from labelmap node and remove temporary nodes
     outputLabelmap.ShallowCopy(mergedLabelmapNode.GetImageData())
     outputLabelmap.SetImageToWorldMatrix(outputRasToIjk)
