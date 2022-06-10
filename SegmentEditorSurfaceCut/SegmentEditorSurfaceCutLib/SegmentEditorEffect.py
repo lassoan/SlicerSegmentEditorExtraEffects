@@ -323,10 +323,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        self.segmentModel.GetDisplayNode().Visibility2DOn()
-      else:
-        self.segmentModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      self.segmentModel.GetDisplayNode().Visibility2DOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -334,25 +331,22 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
       displayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       displayNode.SetTextScale(0)
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
-        # towards the camera as the point is moved.
-        displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
+      # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
+      # towards the camera as the point is moved.
+      displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
       self.segmentMarkupNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       # Prevent "Edit properties..." from being displayed
       # (Edit properties would switch module, which would deactive the effect, thus remove the markups node
       # while the markups node's event is being processed, causing a crash)
       self.segmentMarkupNode.SetHideFromEditors(True)
+
       # Only show "Delete point" action in view context menu to not allow the user to delete the node
-      try:
-        pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
-        pluginLogic = pluginHandler.pluginLogic()
-        itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
-        pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
-      except AttributeError:
-        # pluginLogic.setAllowedViewContextMenuActionNamesForItem method is not yet available in this Slicer version
-        pass
+      pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
+      pluginLogic = pluginHandler.pluginLogic()
+      itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
+      pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
+
       self.segmentMarkupNode.SetName('C')
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
@@ -370,13 +364,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Set and observe new parameter node
     self.segmentMarkupNode = segmentMarkupNode
     if self.segmentMarkupNode:
-      if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-        eventIds = [ vtk.vtkCommand.ModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointAddedEvent,
-          slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
-      else:
-        eventIds = [ vtk.vtkCommand.ModifiedEvent ]
+      eventIds = [ vtk.vtkCommand.ModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+        slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
       for eventId in eventIds:
         self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
     # Update GUI
@@ -428,10 +419,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def getNumberOfDefinedControlPoints(self):
     count = 0
     if self.segmentMarkupNode:
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
-      else:
-        count = self.segmentMarkupNode.GetNumberOfControlPoints()
+      count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
     return count
 
 class SurfaceCutLogic:
@@ -447,10 +435,7 @@ class SurfaceCutLogic:
 
     modelDisplayNode.SetColor(r, g, b)  # Edited segment color
     modelDisplayNode.BackfaceCullingOff()
-    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-      modelDisplayNode.Visibility2DOn()
-    else:
-      modelDisplayNode.SliceIntersectionVisibilityOn()
+    modelDisplayNode.Visibility2DOn()
     modelDisplayNode.SetSliceIntersectionThickness(4)
     modelDisplayNode.SetOpacity(0.6)  # Between 0-1, 1 being opaque
 

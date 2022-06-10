@@ -176,8 +176,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.scriptedEffect.setParameterDefault(MINIMUM_DIAMETER_MM_PARAMETER_NAME, 3)
     self.scriptedEffect.setParameterDefault(FEATURE_SIZE_MM_PARAMETER_NAME, 3)
     self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_GROWCUT)
-    if slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11:
-      self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
+    self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
     SegmentEditorThresholdEffect.setMRMLDefaults(self)
 
   def updateGUIFromMRML(self):

@@ -380,13 +380,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Set and observe new parameter node
     self.segmentMarkupNode = segmentMarkupNode
     if self.segmentMarkupNode:
-      if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-        eventIds = [ vtk.vtkCommand.ModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointAddedEvent,
-          slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
-      else:
-        eventIds = [ vtk.vtkCommand.ModifiedEvent ]
+      eventIds = [ vtk.vtkCommand.ModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+        slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
       for eventId in eventIds:
         self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
       self.segmentMarkupNodeObservers.append(
@@ -507,10 +504,7 @@ class EngraveLogic:
     self.vectorText.SetText(text)
 
     planeToWorldMatrix = vtk.vtkMatrix4x4()
-    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-      inputMarkup.GetObjectToWorldMatrix(planeToWorldMatrix)
-    else:
-      inputMarkup.GetPlaneToWorldMatrix(planeToWorldMatrix)
+    inputMarkup.GetObjectToWorldMatrix(planeToWorldMatrix)
 
     self.vectorText.Update()
     unscaledBounds = self.vectorText.GetOutput().GetBounds()

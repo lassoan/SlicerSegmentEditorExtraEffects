@@ -144,10 +144,9 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
       masterImageDataShort.CopyDirections(masterImageData) # Copy geometry
       masterImageData = masterImageDataShort
 
-    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-      if not self.originalSelectedSegmentLabelmap:
-        segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-        segmentationNode.GetSegmentation().SeparateSegmentLabelmap(self.scriptedEffect.parameterSetNode().GetSelectedSegmentID())
+    if not self.originalSelectedSegmentLabelmap:
+      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+      segmentationNode.GetSegmentation().SeparateSegmentLabelmap(self.scriptedEffect.parameterSetNode().GetSelectedSegmentID())
 
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
     
@@ -171,11 +170,8 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     # collect seeds
     dim = masterImageData.GetDimensions()
     # initialize the filter
-    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-      import vtkSlicerSegmentEditorFastMarchingModuleLogicPython
-      self.fm = vtkSlicerSegmentEditorFastMarchingModuleLogicPython.vtkPichonFastMarching()
-    else:
-      self.fm = slicer.vtkPichonFastMarching()
+    import vtkSlicerSegmentEditorFastMarchingModuleLogicPython
+    self.fm = vtkSlicerSegmentEditorFastMarchingModuleLogicPython.vtkPichonFastMarching()
     scalarRange = masterImageData.GetScalarRange()
     depth = scalarRange[1]-scalarRange[0]
 
@@ -273,11 +269,8 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     # Apply changes
     import vtkSegmentationCorePython as vtkSegmentationCore
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-      modifierLabelmap = vtkSegmentationCore.vtkOrientedImageData()
-      segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId, modifierLabelmap)
-    else:
-      modifierLabelmap = segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId)
+    modifierLabelmap = vtkSegmentationCore.vtkOrientedImageData()
+    segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId, modifierLabelmap)
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
     self.originalSelectedSegmentLabelmap = None
 

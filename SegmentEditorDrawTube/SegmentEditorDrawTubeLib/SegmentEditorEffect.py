@@ -335,10 +335,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.logic.setUpModelDisplayNode(modelDisplayNode)
       self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
 
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        self.segmentModel.GetDisplayNode().Visibility2DOn()
-      else:
-        self.segmentModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      self.segmentModel.GetDisplayNode().Visibility2DOn()
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -352,14 +349,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       # while the markups node's event is being processed, causing a crash)
       self.segmentMarkupNode.SetHideFromEditors(True)
       # Only show "Delete point" action in view context menu to not allow the user to delete the node
-      try:
-        pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
-        pluginLogic = pluginHandler.pluginLogic()
-        itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
-        pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
-      except AttributeError:
-        # pluginLogic.setAllowedViewContextMenuActionNamesForItem method is not yet available in this Slicer version
-        pass
+      pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
+      pluginLogic = pluginHandler.pluginLogic()
+      itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
+      pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
       self.segmentMarkupNode.SetName('T')
       self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
@@ -377,13 +370,10 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     # Set and observe new parameter node
     self.segmentMarkupNode = segmentMarkupNode
     if self.segmentMarkupNode:
-      if (slicer.app.majorVersion >= 5) or (slicer.app.majorVersion >= 4 and slicer.app.minorVersion >= 11):
-        eventIds = [ vtk.vtkCommand.ModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-          slicer.vtkMRMLMarkupsNode.PointAddedEvent,
-          slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
-      else:
-        eventIds = [ vtk.vtkCommand.ModifiedEvent ]
+      eventIds = [ vtk.vtkCommand.ModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
+        slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+        slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
       for eventId in eventIds:
         self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
     # Update GUI
@@ -434,10 +424,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def getNumberOfDefinedControlPoints(self):
     count = 0
     if self.segmentMarkupNode:
-      if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-        count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
-      else:
-        count = self.segmentMarkupNode.GetNumberOfControlPoints()
+      count = self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
     return count
 
 class DrawTubeLogic:
@@ -455,10 +442,7 @@ class DrawTubeLogic:
 
     modelDisplayNode.SetColor(r, g, b)  # Edited segment color
     modelDisplayNode.BackfaceCullingOff()
-    if slicer.app.majorVersion >= 5 or (slicer.app.majorVersion == 4 and slicer.app.minorVersion >= 11):
-      modelDisplayNode.Visibility2DOn()
-    else:
-      modelDisplayNode.SliceIntersectionVisibilityOn()
+    modelDisplayNode.Visibility2DOn()
     modelDisplayNode.SetSliceIntersectionThickness(2)
     modelDisplayNode.SetOpacity(0.3)  # Between 0-1, 1 being opaque
 

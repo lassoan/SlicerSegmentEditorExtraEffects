@@ -25,24 +25,12 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(SegmentEditorFastMarching)
 add_subdirectory(SegmentEditorFloodFilling)
-add_subdirectory(SegmentEditorMaskVolume)
 add_subdirectory(SegmentEditorSurfaceCut)
 add_subdirectory(SegmentEditorWatershed)
 add_subdirectory(SegmentEditorDrawTube)
 add_subdirectory(SegmentEditorSplitVolume)
 add_subdirectory(SegmentEditorLocalThreshold)
-IF (Slicer_VERSION VERSION_LESS 4.9)
-  # Slicer 4.9 and above has Hollow effect built in
-  add_subdirectory(SegmentEditorHollow)
-ENDIF()
-IF (Slicer_VERSION VERSION_GREATER_EQUAL 4.11)
-  # Requires Slicer-4.11 or above
-  add_subdirectory(SegmentEditorEngrave)
-ENDIF()
-IF (Slicer_VERSION VERSION_LESS 4.11)
-  # Latest Slicer 4.11 and above has Mask volume effect built in
-  add_subdirectory(SegmentEditorMaskVolume)
-ENDIF()
+add_subdirectory(SegmentEditorEngrave)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

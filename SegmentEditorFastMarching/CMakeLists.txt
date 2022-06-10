@@ -4,10 +4,7 @@ set(MODULE_NAME SegmentEditorFastMarching)
 
 # vtkPichonFastMarching used to be in Slicer core but it was moved
 # to this extension in Slicer-4.13.
-if(${Slicer_VERSION_MAJOR}.${Slicer_VERSION_MINOR} VERSION_GREATER 4.11)
-  message(STATUS "Slicer version: ${Slicer_VERSION_MAJOR}.${Slicer_VERSION_MINOR}.${Slicer_VERSION_PATCH}. Building vtkPichonFastMarching locally.")
-  add_subdirectory(Logic)
-endif()
+add_subdirectory(Logic)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
