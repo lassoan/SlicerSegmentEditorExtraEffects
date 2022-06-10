@@ -341,13 +341,11 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.segmentModel is None:
       self.segmentModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode")
       self.segmentModel.SetName("SegmentEditorEngraveModel")
-
-      modelDisplayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelDisplayNode")
-      self.logic.setUpModelDisplayNode(modelDisplayNode)
-      self.segmentModel.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
       self.segmentModel.SetSelectable(False) # prevent interference with markup placement
 
-      self.segmentModel.GetDisplayNode().Visibility2DOn()
+      self.segmentModel.CreateDefaultDisplayNodes()
+      modelDisplayNode = self.segmentModel.GetDisplayNode()
+      self.logic.setUpModelDisplayNode(modelDisplayNode)
 
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
@@ -494,7 +492,6 @@ class EngraveLogic:
 
     if not inputMarkup.GetIsPlaneValid() or inputMarkup.GetNumberOfControlPoints() == 0:
       outputModel.GetDisplayNode().SetVisibility(False)
-      #outputModel.GetDisplayNode().SetVisibility2D(False)
       outputModel.SetAndObserveMesh(None)
       return
     outputModel.GetDisplayNode().SetVisibility(True)
@@ -514,7 +511,7 @@ class EngraveLogic:
     # scale marker and translate to desired location on skirt
     self.scaleAndTranslateTransform.Identity()
     self.scaleAndTranslateTransform.Concatenate(planeToWorldMatrix)
-    self.scaleAndTranslateTransform.Translate(planeBounds[0], planeBounds[2], 0)
+    self.scaleAndTranslateTransform.Translate(planeBounds[0]-scale[0]*unscaledBounds[0], planeBounds[2]-scale[0]*unscaledBounds[2], 0)
     self.scaleAndTranslateTransform.Scale(scale)
     self.scaleAndTranslateTransform.Translate(0, 0, -textDepth/2.0)  # center the unit letter
 
