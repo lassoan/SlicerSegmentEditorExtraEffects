@@ -175,8 +175,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
 
     if self.segmentMarkupNode:
-      self.cancelButton.setEnabled(self.getNumberOfDefinedControlPoints() != 0)
-      self.applyButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
+      self.cancelButton.setEnabled(self.segmentMarkupNode.GetNumberOfDefinedControlPoints() != 0)
+      self.applyButton.setEnabled(self.segmentMarkupNode.GetNumberOfDefinedControlPoints() != 0 and self.segmentMarkupNode.GetIsPlaneValid())
       self.interactionResizeButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
       self.interactionMoveButton.setEnabled(self.segmentMarkupNode.GetIsPlaneValid())
       segmentMarkupDisplayNode = self.segmentMarkupNode.GetDisplayNode()
@@ -382,8 +382,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     if self.segmentMarkupNode:
       eventIds = [ vtk.vtkCommand.ModifiedEvent,
         slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
-        slicer.vtkMRMLMarkupsNode.PointAddedEvent,
-        slicer.vtkMRMLMarkupsNode.PointRemovedEvent ]
+        slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent,
+        slicer.vtkMRMLMarkupsNode.PointPositionUndefinedEvent ]
       for eventId in eventIds:
         self.segmentMarkupNodeObservers.append(self.segmentMarkupNode.AddObserver(eventId, self.onSegmentMarkupNodeModified))
       self.segmentMarkupNodeObservers.append(
@@ -437,11 +437,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def interactionNodeModified(self, interactionNode):
     # Override default behavior: keep the effect active if markup placement mode is activated
     pass
-
-  def getNumberOfDefinedControlPoints(self):
-    if not self.segmentMarkupNode:
-      return 0
-    return self.segmentMarkupNode.GetNumberOfDefinedControlPoints()
 
   def onInteractionResizeEnabled(self, enable):
     if not self.segmentMarkupNode or not self.segmentMarkupNode.GetDisplayNode():
@@ -497,9 +492,12 @@ class EngraveLogic:
     Update model to enclose all points in the input markup list
     """
 
-    if not inputMarkup.GetIsPlaneValid():
+    if not inputMarkup.GetIsPlaneValid() or inputMarkup.GetNumberOfControlPoints() == 0:
+      outputModel.GetDisplayNode().SetVisibility(False)
+      #outputModel.GetDisplayNode().SetVisibility2D(False)
       outputModel.SetAndObserveMesh(None)
       return
+    outputModel.GetDisplayNode().SetVisibility(True)
 
     self.vectorText.SetText(text)
 
