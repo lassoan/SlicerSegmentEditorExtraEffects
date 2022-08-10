@@ -96,7 +96,10 @@ Fill segment in a selected region based on master volume intensity range<br>.
       self.previewStep = 1
 
   def getMasterVolumeLayerLogic(self, sliceWidget): # TODO: This function is not a member of SegmentEditorThresholdEffect in 4.10.2, so it is duplicated here for now.
-    masterVolumeNode = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      masterVolumeNode = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
+    else:
+      masterVolumeNode = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     sliceLogic = sliceWidget.sliceLogic()
 
     backgroundLogic = sliceLogic.GetBackgroundLayer()
@@ -232,7 +235,10 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if eventId == vtk.vtkCommand.LeftButtonPressEvent:
       abortEvent = True
 
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
+      if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+        masterImageData = self.scriptedEffect.sourceVolumeImageData()
+      else:
+        masterImageData = self.scriptedEffect.masterVolumeImageData()
 
       xy = callerInteractor.GetEventPosition()
       ijk = self.xyToIjk(xy, viewWidget, masterImageData)
@@ -282,15 +288,27 @@ Fill segment in a selected region based on master volume intensity range<br>.
   def runGrowCut(self, masterImageData, seedLabelmap, outputLabelmap):
 
     self.clippedMaskImageData = slicer.vtkOrientedImageData()
-    intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMask()
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetSourceVolumeIntensityMask()
+    else:
+      intensityBasedMasking = self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMask()
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    success = segmentationNode.GenerateEditMask(self.clippedMaskImageData,
-      self.scriptedEffect.parameterSetNode().GetMaskMode(),
-      masterImageData, # reference geometry
-      "", # edited segment ID
-      self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-      masterImageData if intensityBasedMasking else None,
-      self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      success = segmentationNode.GenerateEditMask(self.clippedMaskImageData,
+        self.scriptedEffect.parameterSetNode().GetMaskMode(),
+        masterImageData, # reference geometry
+        "", # edited segment ID
+        self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
+        masterImageData if intensityBasedMasking else None,
+        self.scriptedEffect.parameterSetNode().GetSourceVolumeIntensityMaskRange() if intensityBasedMasking else None)
+    else:
+      success = segmentationNode.GenerateEditMask(self.clippedMaskImageData,
+        self.scriptedEffect.parameterSetNode().GetMaskMode(),
+        masterImageData, # reference geometry
+        "", # edited segment ID
+        self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
+        masterImageData if intensityBasedMasking else None,
+        self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
 
     import vtkSlicerSegmentationsModuleLogicPython as vtkSlicerSegmentationsModuleLogic
     self.growCutFilter = vtkSlicerSegmentationsModuleLogic.vtkImageGrowCutSegment()
@@ -351,17 +369,30 @@ Fill segment in a selected region based on master volume intensity range<br>.
     # Get modifier labelmap
     modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
 
-    # Get master volume image data
-    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      # Get master volume image data
+      masterImageData = self.scriptedEffect.sourceVolumeImageData()
 
-    # Set intensity range
-    oldMasterVolumeIntensityMask = parameterSetNode.GetMasterVolumeIntensityMask()
-    parameterSetNode.MasterVolumeIntensityMaskOn()
-    oldIntensityMaskRange = parameterSetNode.GetMasterVolumeIntensityMaskRange()
-    intensityRange = [minimumThreshold, maximumThreshold]
-    if oldMasterVolumeIntensityMask:
-      intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
-    parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
+      # Set intensity range
+      oldMasterVolumeIntensityMask = parameterSetNode.GetSourceVolumeIntensityMask()
+      parameterSetNode.SourceVolumeIntensityMaskOn()
+      oldIntensityMaskRange = parameterSetNode.GetSourceVolumeIntensityMaskRange()
+      intensityRange = [minimumThreshold, maximumThreshold]
+      if oldMasterVolumeIntensityMask:
+        intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
+      parameterSetNode.SetSourceVolumeIntensityMaskRange(intensityRange)
+    else:
+      # Get master volume image data
+      masterImageData = self.scriptedEffect.masterVolumeImageData()
+
+      # Set intensity range
+      oldMasterVolumeIntensityMask = parameterSetNode.GetMasterVolumeIntensityMask()
+      parameterSetNode.MasterVolumeIntensityMaskOn()
+      oldIntensityMaskRange = parameterSetNode.GetMasterVolumeIntensityMaskRange()
+      intensityRange = [minimumThreshold, maximumThreshold]
+      if oldMasterVolumeIntensityMask:
+        intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
+      parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
     roiNode = self.roiSelector.currentNode()
     if roiNode is not None:
@@ -478,8 +509,12 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.scriptedEffect.saveStateForUndo()
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 
-    parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
-    parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      parameterSetNode.SetSourceVolumeIntensityMask(oldMasterVolumeIntensityMask)
+      parameterSetNode.SetSourceVolumeIntensityMaskRange(oldIntensityMaskRange)
+    else:
+      parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
+      parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
 
     qt.QApplication.restoreOverrideCursor()
 

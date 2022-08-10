@@ -111,7 +111,10 @@ class SegmentEditorSplitVolumeTest(ScriptedLoadableModuleTest):
     slicer.mrmlScene.AddNode(segmentEditorNode)
     segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
     segmentEditorWidget.setSegmentationNode(segmentationNode)
-    segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      segmentEditorWidget.setSourceVolumeNode(masterVolumeNode)
+    else:
+      segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
 
     ##################################
     self.delayDisplay("Run segmentation")
@@ -129,7 +132,7 @@ class SegmentEditorSplitVolumeTest(ScriptedLoadableModuleTest):
     self.delayDisplay("Check extent of cropped volumes")
     expectedBounds = [
       [100.31225000000003, 119.99975000000003, 101.24974999999999, 119.99974999999999, -78.4, -58.8],
-      [19.68725000000002, 119.99975000000003, 16.874749999999977, 119.99974999999999, -78.4, 16.80000000000001], 
+      [19.68725000000002, 119.99975000000003, 16.874749999999977, 119.99974999999999, -78.4, 16.80000000000001],
       [-49.687749999999994, 119.99975000000003, 90.93724999999999, 119.99974999999999, -78.4, -47.6] ]
 
     for segmentIndex in range(segmentationNode.GetSegmentation().GetNumberOfSegments()):
@@ -139,8 +142,8 @@ class SegmentEditorSplitVolumeTest(ScriptedLoadableModuleTest):
       bounds=[0,0,0,0,0,0]
       outputVolume.GetBounds(bounds)
       self.assertEqual( bounds, expectedBounds)
-      
-      
+
+
     ##################################
     self.delayDisplay("Compute statistics")
 
