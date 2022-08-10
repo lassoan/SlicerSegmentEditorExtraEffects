@@ -81,10 +81,10 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.inputVolumeSelector.addEnabled = True
     self.inputVolumeSelector.removeEnabled = True
     self.inputVolumeSelector.noneEnabled = True
-    self.inputVolumeSelector.noneDisplay = "(Master volume)"
+    self.inputVolumeSelector.noneDisplay = "(Source volume)"
     self.inputVolumeSelector.showHidden = False
     self.inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
-    self.inputVolumeSelector.setToolTip("Volume to split. Default is current master volume node.")
+    self.inputVolumeSelector.setToolTip("Volume to split. Default is current source volume node.")
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
 
     inputLayout = qt.QHBoxLayout()

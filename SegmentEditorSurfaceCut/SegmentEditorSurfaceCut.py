@@ -58,11 +58,11 @@ class SegmentEditorSurfaceCutTest(ScriptedLoadableModuleTest):
 
 
     ##################################
-    self.delayDisplay("Load master volume")
+    self.delayDisplay("Load source volume")
 
     import SampleData
     sampleDataLogic = SampleData.SampleDataLogic()
-    masterVolumeNode = sampleDataLogic.downloadMRBrainTumor1()
+    sourceVolumeNode = sampleDataLogic.downloadMRBrainTumor1()
 
     ##################################
     self.delayDisplay("Create tumor segmentation")
@@ -70,7 +70,7 @@ class SegmentEditorSurfaceCutTest(ScriptedLoadableModuleTest):
     segmentationNode = slicer.vtkMRMLSegmentationNode()
     slicer.mrmlScene.AddNode(segmentationNode)
     segmentationNode.CreateDefaultDisplayNodes()
-    segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(masterVolumeNode)
+    segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(sourceVolumeNode)
 
     segmentName = "Tumor"
     import vtkSegmentationCorePython as vtkSegmentationCore
@@ -90,9 +90,9 @@ class SegmentEditorSurfaceCutTest(ScriptedLoadableModuleTest):
     segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
     segmentEditorWidget.setSegmentationNode(segmentationNode)
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      segmentEditorWidget.setSourceVolumeNode(masterVolumeNode)
+      segmentEditorWidget.setSourceVolumeNode(sourceVolumeNode)
     else:
-      segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
+      segmentEditorWidget.setMasterVolumeNode(sourceVolumeNode)
 
     ##################################
     self.delayDisplay("Run segmentation")
@@ -140,7 +140,7 @@ class SegmentEditorSurfaceCutTest(ScriptedLoadableModuleTest):
     segStatLogic = SegmentStatisticsLogic()
 
     segStatLogic.getParameterNode().SetParameter("Segmentation", segmentationNode.GetID())
-    segStatLogic.getParameterNode().SetParameter("ScalarVolume", masterVolumeNode.GetID())
+    segStatLogic.getParameterNode().SetParameter("ScalarVolume", sourceVolumeNode.GetID())
     segStatLogic.getParameterNode().SetParameter("visibleSegmentsOnly", "False")
 
     segStatLogic.computeStatistics()

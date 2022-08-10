@@ -497,7 +497,7 @@ class SurfaceCutLogic:
       modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
       if not modifierLabelmap:
         raise AttributeError("{}: ModifierLabelmap not set. This can happen for various reasons:\n"
-                             "No master volume set for segmentation,\n"
+                             "No source volume set for segmentation,\n"
                              "No existing segments for segmentation, or\n"
                              "No referenceImageGeometry is specified in the segmentation".format(self.__class__.__name__))
 

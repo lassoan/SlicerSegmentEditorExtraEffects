@@ -31,7 +31,7 @@ class SegmentEditorEffect(SegmentEditorThresholdEffect):
 
   def helpText(self):
     return """<html>
-Fill segment in a selected region based on master volume intensity range<br>.
+Fill segment in a selected region based on source volume intensity range<br>.
 <p>
   <b>Ctrl + left-click:</b> Add the selected island within the threshold to the segment.
 </p>
@@ -84,7 +84,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     for sliceWidget in self.previewPipelines:
       pipeline = self.previewPipelines[sliceWidget]
       pipeline.lookupTable.SetTableValue(1,  r, g, b,  opacity)
-      layerLogic = self.getMasterVolumeLayerLogic(sliceWidget)
+      layerLogic = self.getSourceVolumeLayerLogic(sliceWidget)
       pipeline.thresholdFilter.SetInputConnection(layerLogic.GetReslice().GetOutputPort())
       pipeline.thresholdFilter.ThresholdBetween(min, max)
       pipeline.actor.VisibilityOn()
@@ -96,24 +96,24 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if self.previewState <= 0:
       self.previewStep = 1
 
-  def getMasterVolumeLayerLogic(self, sliceWidget): # TODO: This function is not a member of SegmentEditorThresholdEffect in 4.10.2, so it is duplicated here for now.
+  def getSourceVolumeLayerLogic(self, sliceWidget): # TODO: This function is not a member of SegmentEditorThresholdEffect in 4.10.2, so it is duplicated here for now.
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      masterVolumeNode = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
+      sourceVolumeNode = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
     else:
-      masterVolumeNode = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+      sourceVolumeNode = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     sliceLogic = sliceWidget.sliceLogic()
 
     backgroundLogic = sliceLogic.GetBackgroundLayer()
     backgroundVolumeNode = backgroundLogic.GetVolumeNode()
-    if masterVolumeNode == backgroundVolumeNode:
+    if sourceVolumeNode == backgroundVolumeNode:
       return backgroundLogic
 
     foregroundLogic = sliceLogic.GetForegroundLayer()
     foregroundVolumeNode = foregroundLogic.GetVolumeNode()
-    if masterVolumeNode == foregroundVolumeNode:
+    if sourceVolumeNode == foregroundVolumeNode:
       return foregroundLogic
 
-    logging.warning("Master volume is not set as either the foreground or background")
+    logging.warning("Source volume is not set as either the foreground or background")
 
     foregroundOpacity = 0.0
     if foregroundVolumeNode:
@@ -243,12 +243,12 @@ Fill segment in a selected region based on master volume intensity range<br>.
       abortEvent = True
 
       if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-        masterImageData = self.scriptedEffect.sourceVolumeImageData()
+        sourceImageData = self.scriptedEffect.sourceVolumeImageData()
       else:
-        masterImageData = self.scriptedEffect.masterVolumeImageData()
+        sourceImageData = self.scriptedEffect.masterVolumeImageData()
 
       xy = callerInteractor.GetEventPosition()
-      ijk = self.xyToIjk(xy, viewWidget, masterImageData)
+      ijk = self.xyToIjk(xy, viewWidget, sourceImageData)
 
       ijkPoints = vtk.vtkPoints()
       ijkPoints.InsertNextPoint(ijk[0], ijk[1], ijk[2])
@@ -292,7 +292,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.floodFillingFilter.Update()
     outputLabelmap.ShallowCopy(self.floodFillingFilter.GetOutput())
 
-  def runGrowCut(self, masterImageData, seedLabelmap, outputLabelmap):
+  def runGrowCut(self, sourceImageData, seedLabelmap, outputLabelmap):
 
     self.clippedMaskImageData = slicer.vtkOrientedImageData()
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
@@ -303,33 +303,33 @@ Fill segment in a selected region based on master volume intensity range<br>.
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
       success = segmentationNode.GenerateEditMask(self.clippedMaskImageData,
         self.scriptedEffect.parameterSetNode().GetMaskMode(),
-        masterImageData, # reference geometry
+        sourceImageData, # reference geometry
         "", # edited segment ID
         self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-        masterImageData if intensityBasedMasking else None,
+        sourceImageData if intensityBasedMasking else None,
         self.scriptedEffect.parameterSetNode().GetSourceVolumeIntensityMaskRange() if intensityBasedMasking else None)
     else:
       success = segmentationNode.GenerateEditMask(self.clippedMaskImageData,
         self.scriptedEffect.parameterSetNode().GetMaskMode(),
-        masterImageData, # reference geometry
+        sourceImageData, # reference geometry
         "", # edited segment ID
         self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-        masterImageData if intensityBasedMasking else None,
+        sourceImageData if intensityBasedMasking else None,
         self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
 
     import vtkSlicerSegmentationsModuleLogicPython as vtkSlicerSegmentationsModuleLogic
     self.growCutFilter = vtkSlicerSegmentationsModuleLogic.vtkImageGrowCutSegment()
-    self.growCutFilter.SetIntensityVolume(masterImageData)
+    self.growCutFilter.SetIntensityVolume(sourceImageData)
     self.growCutFilter.SetSeedLabelVolume(seedLabelmap)
     self.growCutFilter.SetMaskVolume(self.clippedMaskImageData)
     self.growCutFilter.Update()
     outputLabelmap.ShallowCopy(self.growCutFilter.GetOutput())
 
-  def runWatershed(self, masterImageData, seedLabelmap, outputLabelmap):
+  def runWatershed(self, sourceImageData, seedLabelmap, outputLabelmap):
 
-    masterVolumeNode = slicer.vtkMRMLScalarVolumeNode()
-    slicer.mrmlScene.AddNode(masterVolumeNode)
-    slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(masterImageData, masterVolumeNode)
+    sourceVolumeNode = slicer.vtkMRMLScalarVolumeNode()
+    slicer.mrmlScene.AddNode(sourceVolumeNode)
+    slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(sourceImageData, sourceVolumeNode)
 
     seedLabelmapNode = slicer.vtkMRMLLabelMapVolumeNode()
     slicer.mrmlScene.AddNode(seedLabelmapNode)
@@ -337,7 +337,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     # Read input data from Slicer into SimpleITK
     labelImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(seedLabelmapNode.GetName()))
-    backgroundImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(masterVolumeNode.GetName()))
+    backgroundImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(sourceVolumeNode.GetName()))
     # Run watershed filter
     featureImage = sitk.GradientMagnitudeRecursiveGaussian(backgroundImage, float(self.scriptedEffect.doubleParameter(FEATURE_SIZE_MM_PARAMETER_NAME)))
     del backgroundImage
@@ -354,9 +354,9 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     # Update segmentation from labelmap node and remove temporary nodes
     outputLabelmap.ShallowCopy(seedLabelmapNode.GetImageData())
-    outputLabelmap.SetExtent(masterImageData.GetExtent())
+    outputLabelmap.SetExtent(sourceImageData.GetExtent())
 
-    slicer.mrmlScene.RemoveNode(masterVolumeNode)
+    slicer.mrmlScene.RemoveNode(sourceVolumeNode)
     slicer.mrmlScene.RemoveNode(seedLabelmapNode)
 
   def apply(self, ijkPoints):
@@ -377,41 +377,41 @@ Fill segment in a selected region based on master volume intensity range<br>.
     modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
 
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      # Get master volume image data
-      masterImageData = self.scriptedEffect.sourceVolumeImageData()
+      # Get source volume image data
+      sourceImageData = self.scriptedEffect.sourceVolumeImageData()
 
       # Set intensity range
-      oldMasterVolumeIntensityMask = parameterSetNode.GetSourceVolumeIntensityMask()
+      oldSourceVolumeIntensityMask = parameterSetNode.GetSourceVolumeIntensityMask()
       parameterSetNode.SourceVolumeIntensityMaskOn()
       oldIntensityMaskRange = parameterSetNode.GetSourceVolumeIntensityMaskRange()
       intensityRange = [minimumThreshold, maximumThreshold]
-      if oldMasterVolumeIntensityMask:
+      if oldSourceVolumeIntensityMask:
         intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
       parameterSetNode.SetSourceVolumeIntensityMaskRange(intensityRange)
     else:
       # Get master volume image data
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
+      sourceImageData = self.scriptedEffect.masterVolumeImageData()
 
       # Set intensity range
-      oldMasterVolumeIntensityMask = parameterSetNode.GetMasterVolumeIntensityMask()
+      oldSourceVolumeIntensityMask = parameterSetNode.GetMasterVolumeIntensityMask()
       parameterSetNode.MasterVolumeIntensityMaskOn()
       oldIntensityMaskRange = parameterSetNode.GetMasterVolumeIntensityMaskRange()
       intensityRange = [minimumThreshold, maximumThreshold]
-      if oldMasterVolumeIntensityMask:
+      if oldSourceVolumeIntensityMask:
         intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
       parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
     roiNode = self.scriptedEffect.parameterSetNode().GetNodeReference(self.ROI_NODE_REFERENCE_ROLE)
     if roiNode is not None:
-      clippedMasterImageData = SegmentEditorEffect.cropOrientedImage(masterImageData, roiNode)
+      clippedSourceImageData = SegmentEditorEffect.cropOrientedImage(sourceImageData, roiNode)
     else:
-      clippedMasterImageData = masterImageData
+      clippedSourceImageData = sourceImageData
 
     # Pipeline
     self.thresh = vtk.vtkImageThreshold()
     self.thresh.SetInValue(LABEL_VALUE)
     self.thresh.SetOutValue(BACKGROUND_VALUE)
-    self.thresh.SetInputData(clippedMasterImageData)
+    self.thresh.SetInputData(clippedSourceImageData)
     self.thresh.ThresholdBetween(minimumThreshold, maximumThreshold)
     self.thresh.SetOutputScalarTypeToUnsignedChar()
     self.thresh.Update()
@@ -453,8 +453,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     # Convert points to real data coordinates. Required for vtkImageThresholdConnectivity.
     seedPoints = vtk.vtkPoints()
-    origin = masterImageData.GetOrigin()
-    spacing = masterImageData.GetSpacing()
+    origin = sourceImageData.GetOrigin()
+    spacing = sourceImageData.GetSpacing()
     for i in range(snappedIJKPoints.GetNumberOfPoints()):
       ijkPoint = snappedIJKPoints.GetPoint(i)
       seedPoints.InsertNextPoint(
@@ -489,16 +489,16 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
       imageMaskOutput = slicer.vtkOrientedImageData()
       imageMaskOutput.ShallowCopy(self.imageMask.GetOutput())
-      imageMaskOutput.CopyDirections(clippedMasterImageData)
+      imageMaskOutput.CopyDirections(clippedSourceImageData)
 
       imageToWorldMatrix = vtk.vtkMatrix4x4()
       imageMaskOutput.GetImageToWorldMatrix(imageToWorldMatrix)
 
       segmentOutputLabelmap = slicer.vtkOrientedImageData()
       if segmentationAlgorithm == SEGMENTATION_ALGORITHM_GROWCUT:
-        self.runGrowCut(clippedMasterImageData, imageMaskOutput, segmentOutputLabelmap)
+        self.runGrowCut(clippedSourceImageData, imageMaskOutput, segmentOutputLabelmap)
       elif segmentationAlgorithm == SEGMENTATION_ALGORITHM_WATERSHED:
-        self.runWatershed(clippedMasterImageData, imageMaskOutput, segmentOutputLabelmap)
+        self.runWatershed(clippedSourceImageData, imageMaskOutput, segmentOutputLabelmap)
       else:
         logging.error("Unknown segmentation algorithm: \"" + segmentationAlgorithm + "\"")
 
@@ -517,10 +517,10 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeAdd)
 
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      parameterSetNode.SetSourceVolumeIntensityMask(oldMasterVolumeIntensityMask)
+      parameterSetNode.SetSourceVolumeIntensityMask(oldSourceVolumeIntensityMask)
       parameterSetNode.SetSourceVolumeIntensityMaskRange(oldIntensityMaskRange)
     else:
-      parameterSetNode.SetMasterVolumeIntensityMask(oldMasterVolumeIntensityMask)
+      parameterSetNode.SetMasterVolumeIntensityMask(oldSourceVolumeIntensityMask)
       parameterSetNode.SetMasterVolumeIntensityMaskRange(oldIntensityMaskRange)
 
     qt.QApplication.restoreOverrideCursor()
@@ -578,13 +578,13 @@ Fill segment in a selected region based on master volume intensity range<br>.
     return kernelSizePixel
 
   @staticmethod
-  def cropOrientedImage(masterImageData, roiNode):
-    """Clip master image data with annotation ROI and return result in a new vtkOrientedImageData"""
+  def cropOrientedImage(sourceImageData, roiNode):
+    """Clip source image data with annotation ROI and return result in a new vtkOrientedImageData"""
     # This is a utility function, also used in FloodFilling effect.
-    # Probably we should apply relative transform between ROI and master image data node
+    # Probably we should apply relative transform between ROI and source image data node
 
     worldToImageMatrix = vtk.vtkMatrix4x4()
-    masterImageData.GetWorldToImageMatrix(worldToImageMatrix)
+    sourceImageData.GetWorldToImageMatrix(worldToImageMatrix)
 
     bounds = [0,0,0,0,0,0]
     roiNode.GetRASBounds(bounds)
@@ -604,16 +604,16 @@ Fill segment in a selected region based on master volume intensity range<br>.
         extent[2*i+1] = int(math.ceil(upperPoint))
 
     imageToWorldMatrix = vtk.vtkMatrix4x4()
-    masterImageData.GetImageToWorldMatrix(imageToWorldMatrix)
-    clippedMasterImageData = slicer.vtkOrientedImageData()
+    sourceImageData.GetImageToWorldMatrix(imageToWorldMatrix)
+    clippedSourceImageData = slicer.vtkOrientedImageData()
     padder = vtk.vtkImageConstantPad()
-    padder.SetInputData(masterImageData)
+    padder.SetInputData(sourceImageData)
     padder.SetOutputWholeExtent(extent)
     padder.Update()
-    clippedMasterImageData.ShallowCopy(padder.GetOutput())
-    clippedMasterImageData.SetImageToWorldMatrix(imageToWorldMatrix)
+    clippedSourceImageData.ShallowCopy(padder.GetOutput())
+    clippedSourceImageData.SetImageToWorldMatrix(imageToWorldMatrix)
 
-    return clippedMasterImageData
+    return clippedSourceImageData
 
 
 MINIMUM_DIAMETER_MM_PARAMETER_NAME = "MinimumDiameterMm"

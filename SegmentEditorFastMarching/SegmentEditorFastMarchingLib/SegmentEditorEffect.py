@@ -44,7 +44,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.percentMax.singleStep = 1
     self.percentMax.value = 10
     self.percentMax.suffix = '%'
-    self.percentMax.setToolTip('Approximate volume of the structure to be segmented as percentage of total volume of the master image.'
+    self.percentMax.setToolTip('Approximate volume of the structure to be segmented as percentage of total volume of the source image.'
       ' Segmentation will grow from the seed label until this value is reached')
     self.percentMax.connect('valueChanged(double)', self.percentMaxChanged)
     self.scriptedEffect.addLabeledOptionsWidget("Maximum volume:", self.percentMax)
@@ -126,26 +126,26 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
 
     self.fm = None
 
-    # Get master volume image data
+    # Get source volume image data
     import vtkSegmentationCorePython as vtkSegmentationCore
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      masterImageData = self.scriptedEffect.sourceVolumeImageData()
+      sourceImageData = self.scriptedEffect.sourceVolumeImageData()
     else:
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
+      sourceImageData = self.scriptedEffect.masterVolumeImageData()
     # Get segmentation
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
 
-    # Cast master image if not short
-    if masterImageData.GetScalarType() != vtk.VTK_SHORT:
+    # Cast source image if not short
+    if sourceImageData.GetScalarType() != vtk.VTK_SHORT:
       imageCast = vtk.vtkImageCast()
-      imageCast.SetInputData(masterImageData)
+      imageCast.SetInputData(sourceImageData)
       imageCast.SetOutputScalarTypeToShort()
       imageCast.ClampOverflowOn()
       imageCast.Update()
-      masterImageDataShort = vtkSegmentationCore.vtkOrientedImageData()
-      masterImageDataShort.ShallowCopy(imageCast.GetOutput()) # Copy image data
-      masterImageDataShort.CopyDirections(masterImageData) # Copy geometry
-      masterImageData = masterImageDataShort
+      sourceImageDataShort = vtkSegmentationCore.vtkOrientedImageData()
+      sourceImageDataShort.ShallowCopy(imageCast.GetOutput()) # Copy image data
+      sourceImageDataShort.CopyDirections(sourceImageData) # Copy geometry
+      sourceImageData = sourceImageDataShort
 
     if not self.originalSelectedSegmentLabelmap:
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -171,11 +171,11 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     labelImage = thresh.GetOutput()
 
     # collect seeds
-    dim = masterImageData.GetDimensions()
+    dim = sourceImageData.GetDimensions()
     # initialize the filter
     import vtkSlicerSegmentEditorFastMarchingModuleLogicPython
     self.fm = vtkSlicerSegmentEditorFastMarchingModuleLogicPython.vtkPichonFastMarching()
-    scalarRange = masterImageData.GetScalarRange()
+    scalarRange = sourceImageData.GetScalarRange()
     depth = scalarRange[1]-scalarRange[0]
 
     # this is more or less arbitrary; large depth values will bring the
@@ -190,19 +190,19 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
 
     if scaleValue or shiftValue:
       rescale = vtk.vtkImageShiftScale()
-      rescale.SetInputData(masterImageData)
+      rescale.SetInputData(sourceImageData)
       rescale.SetScale(scaleValue)
       rescale.SetShift(shiftValue)
       rescale.Update()
-      masterImageData = rescale.GetOutput()
-      scalarRange = masterImageData.GetScalarRange()
+      sourceImageData = rescale.GetOutput()
+      scalarRange = sourceImageData.GetScalarRange()
       depth = scalarRange[1]-scalarRange[0]
 
     self.fm.init(dim[0], dim[1], dim[2], depth, 1, 1, 1)
 
     caster = vtk.vtkImageCast()
     caster.SetOutputScalarTypeToShort()
-    caster.SetInputData(masterImageData)
+    caster.SetInputData(sourceImageData)
     self.fm.SetInputConnection(caster.GetOutputPort())
 
     # self.fm.SetOutput(labelImage)
