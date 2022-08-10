@@ -10,7 +10,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorAutoCompleteEffect):
     AbstractScriptedSegmentEditorAutoCompleteEffect.__init__(self, scriptedEffect)
     scriptedEffect.name = 'Watershed'
     self.minimumNumberOfSegments = 2
-    self.clippedMasterImageDataRequired = True # master volume intensities are used by this effect
+    self.clippedMasterImageDataRequired = True # source volume intensities are used by this effect
     self.growCutFilter = None
 
   def clone(self):
@@ -27,8 +27,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorAutoCompleteEffect):
 
   def helpText(self):
     return """<html>Growing segments to create complete segmentation<br>.
-Location, size, and shape of initial segments and content of master volume are taken into account.
-Final segment boundaries will be placed where master volume brightness changes abruptly. Instructions:<p>
+Location, size, and shape of initial segments and content of source volume are taken into account.
+Final segment boundaries will be placed where source volume brightness changes abruptly. Instructions:<p>
 <ul style="margin: 0">
 <li>Use Paint or other offects to draw seeds in each region that should belong to a separate segment.
 Paint each seed with a different segment. Minimum two segments are required.</li>
@@ -92,9 +92,9 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
 
-    masterVolumeNode = slicer.vtkMRMLScalarVolumeNode()
-    slicer.mrmlScene.AddNode(masterVolumeNode)
-    slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(self.clippedMasterImageData, masterVolumeNode)
+    sourceVolumeNode = slicer.vtkMRMLScalarVolumeNode()
+    slicer.mrmlScene.AddNode(sourceVolumeNode)
+    slicer.vtkSlicerSegmentationsModuleLogic.CopyOrientedImageDataToVolumeNode(self.clippedMasterImageData, sourceVolumeNode)
 
     mergedLabelmapNode = slicer.vtkMRMLLabelMapVolumeNode()
     slicer.mrmlScene.AddNode(mergedLabelmapNode)
@@ -109,7 +109,7 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
     import sitkUtils
     # Read input data from Slicer into SimpleITK
     labelImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(mergedLabelmapNode.GetName()))
-    backgroundImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(masterVolumeNode.GetName()))
+    backgroundImage = sitk.ReadImage(sitkUtils.GetSlicerITKReadWriteAddress(sourceVolumeNode.GetName()))
     # Run watershed filter
     featureImage = sitk.GradientMagnitudeRecursiveGaussian(backgroundImage, float(self.scriptedEffect.doubleParameter("ObjectScaleMm")))
     del backgroundImage
@@ -129,7 +129,7 @@ The effect uses <a href="https://itk.org/Doxygen/html/classitk_1_1MorphologicalW
     outputLabelmap.SetImageToWorldMatrix(outputRasToIjk)
     outputLabelmap.SetExtent(outputExtent)
 
-    slicer.mrmlScene.RemoveNode(masterVolumeNode)
+    slicer.mrmlScene.RemoveNode(sourceVolumeNode)
     slicer.mrmlScene.RemoveNode(mergedLabelmapNode)
 
     qt.QApplication.restoreOverrideCursor()

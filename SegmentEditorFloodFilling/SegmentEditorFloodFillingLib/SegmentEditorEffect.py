@@ -36,7 +36,7 @@ Masking settings can be used to restrict growing to a specific region.
 
   def activate(self):
     # Update intensity range
-    self.masterVolumeNodeChanged()
+    self.sourceVolumeNodeChanged()
 
   def setupOptionsFrame(self):
 
@@ -75,31 +75,31 @@ Masking settings can be used to restrict growing to a specific region.
     #return slicer.util.mainWindow().cursor
     return qt.QCursor(qt.Qt.PointingHandCursor)
 
-  def masterVolumeNodeChanged(self):
-    # Force recomputation of clipped master image data
+  def sourceVolumeNodeChanged(self):
+    # Force recomputation of clipped source image data
     self.clippedMasterImageData = None
 
-    # Set scalar range of master volume image data to threshold slider
+    # Set scalar range of source volume image data to threshold slider
     import math
     import vtkSegmentationCorePython as vtkSegmentationCore
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      masterImageData = self.scriptedEffect.sourceVolumeImageData()
+      sourceImageData = self.scriptedEffect.sourceVolumeImageData()
     else:
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
-    if not masterImageData:
+      sourceImageData = self.scriptedEffect.masterVolumeImageData()
+    if not sourceImageData:
       return
 
     # TODO: it might be useful to add a convenience function, which determines size and intensity min/max/step/decimals
-    # based on the selected master volume's size, spacing, and intensity range
+    # based on the selected source volume's size, spacing, and intensity range
 
     # Intensity slider
-    lo, hi = masterImageData.GetScalarRange()
+    lo, hi = sourceImageData.GetScalarRange()
     if (hi-lo > 0):
       range = hi-lo
       stepSize = 1
 
       # For floating-point volume: step size is 1/1000th of range (but maximum 1)
-      if masterImageData.GetScalarType() == vtk.VTK_FLOAT or masterImageData.GetScalarType() == vtk.VTK_DOUBLE:
+      if sourceImageData.GetScalarType() == vtk.VTK_FLOAT or sourceImageData.GetScalarType() == vtk.VTK_DOUBLE:
         stepSize = 10**(math.floor(math.log(range/1000.0)/math.log(10)))
         if stepSize > 1:
           stepSize = 1
@@ -111,7 +111,7 @@ Masking settings can be used to restrict growing to a specific region.
       self.intensityToleranceSlider.pageStep = stepSize*10
 
     # Size slider
-    minSpacing = min(masterImageData.GetSpacing())
+    minSpacing = min(sourceImageData.GetSpacing())
     self.neighborhoodSizeMmSlider.maximum = 10**(math.ceil(math.log(minSpacing*100.0)/math.log(10)))
     self.neighborhoodSizeMmSlider.singleStep = self.neighborhoodSizeMmSlider.minimum
     self.neighborhoodSizeMmSlider.pageStep = self.neighborhoodSizeMmSlider.singleStep*10
@@ -137,29 +137,29 @@ Masking settings can be used to restrict growing to a specific region.
     self.scriptedEffect.setParameter("NeighborhoodSizeMm", self.neighborhoodSizeMmSlider.value)
     self.scriptedEffect.parameterSetNode().SetNodeReferenceID("FloodFilling.ROI", self.roiSelector.currentNodeID)
 
-  def getClippedMasterImageData(self):
-    # Return masterImageData unchanged if there is no ROI
+  def getClippedSourceImageData(self):
+    # Return sourceImageData unchanged if there is no ROI
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      masterImageData = self.scriptedEffect.sourceVolumeImageData()
+      sourceImageData = self.scriptedEffect.sourceVolumeImageData()
     else:
-      masterImageData = self.scriptedEffect.masterVolumeImageData()
+      sourceImageData = self.scriptedEffect.masterVolumeImageData()
     roiNode = self.roiSelector.currentNode()
-    if roiNode is None or masterImageData is None:
+    if roiNode is None or sourceImageData is None:
       self.clippedMasterImageData = None
       self.lastRoiNodeId = ""
       self.lastRoiNodeModifiedTime = 0
-      return masterImageData
+      return sourceImageData
 
     # Return last clipped image data if there was no change
     if (self.clippedMasterImageData is not None
       and roiNode.GetID() == self.lastRoiNodeId
       and roiNode.GetMTime() == self.lastRoiNodeModifiedTime):
-      # Use cached clipped master image data
+      # Use cached clipped source image data
       return self.clippedMasterImageData
 
-    # Compute clipped master image
+    # Compute clipped source image
     import SegmentEditorLocalThresholdLib
-    self.clippedMasterImageData = SegmentEditorLocalThresholdLib.SegmentEditorEffect.cropOrientedImage(masterImageData, roiNode)
+    self.clippedMasterImageData = SegmentEditorLocalThresholdLib.SegmentEditorEffect.cropOrientedImage(sourceImageData, roiNode)
     self.lastRoiNodeId = roiNode.GetID()
     self.lastRoiNodeModifiedTime = roiNode.GetMTime()
     return self.clippedMasterImageData
@@ -177,11 +177,11 @@ Masking settings can be used to restrict growing to a specific region.
       try:
         xy = callerInteractor.GetEventPosition()
         import vtkSegmentationCorePython as vtkSegmentationCore
-        masterImageData = self.getClippedMasterImageData()
-        ijk = self.xyToIjk(xy, viewWidget, masterImageData)
+        sourceImageData = self.getClippedSourceImageData()
+        ijk = self.xyToIjk(xy, viewWidget, sourceImageData)
         self.floodFillFromPoint(ijk)
       except IndexError:
-        logging.error('apply: Failed to threshold master volume!')
+        logging.error('apply: Failed to threshold source volume!')
       finally:
         qt.QApplication.restoreOverrideCursor()
       abortEvent = True
@@ -189,29 +189,29 @@ Masking settings can be used to restrict growing to a specific region.
     return abortEvent
 
   def floodFillFromPoint(self, ijk):
-    """Fills the segment taking based on the current master volume.
-    Input IJK position is voxel coordinates of master volume.
+    """Fills the segment taking based on the current source volume.
+    Input IJK position is voxel coordinates of source volume.
     """
     self.scriptedEffect.saveStateForUndo()
 
-    # Get master volume image data
+    # Get source volume image data
     import vtkSegmentationCorePython as vtkSegmentationCore
-    masterImageData = self.getClippedMasterImageData()
+    sourceImageData = self.getClippedSourceImageData()
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
 
     # Get modifier labelmap
     modifierLabelmap = self.scriptedEffect.defaultModifierLabelmap()
 
-    pixelValue = masterImageData.GetScalarComponentAsFloat(ijk[0], ijk[1], ijk[2], 0)
+    pixelValue = sourceImageData.GetScalarComponentAsFloat(ijk[0], ijk[1], ijk[2], 0)
 
     useSegmentationAsStencil = False
 
     # Perform thresholding
     floodFillingFilter = vtk.vtkImageThresholdConnectivity()
-    floodFillingFilter.SetInputData(masterImageData)
+    floodFillingFilter.SetInputData(sourceImageData)
     seedPoints = vtk.vtkPoints()
-    origin = masterImageData.GetOrigin()
-    spacing = masterImageData.GetSpacing()
+    origin = sourceImageData.GetOrigin()
+    spacing = sourceImageData.GetSpacing()
     seedPoints.InsertNextPoint(origin[0]+ijk[0]*spacing[0], origin[1]+ijk[1]*spacing[1], origin[2]+ijk[2]*spacing[2])
     floodFillingFilter.SetSeedPoints(seedPoints)
 
@@ -224,18 +224,18 @@ Masking settings can be used to restrict growing to a specific region.
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
       success = segmentationNode.GenerateEditMask(maskImageData,
         self.scriptedEffect.parameterSetNode().GetMaskMode(),
-        masterImageData, # reference geometry
+        sourceImageData, # reference geometry
         self.scriptedEffect.parameterSetNode().GetSelectedSegmentID(),
         self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-        masterImageData if intensityBasedMasking else None,
+        sourceImageData if intensityBasedMasking else None,
         self.scriptedEffect.parameterSetNode().GetSourceVolumeIntensityMaskRange() if intensityBasedMasking else None)
     else:
       success = segmentationNode.GenerateEditMask(maskImageData,
         self.scriptedEffect.parameterSetNode().GetMaskMode(),
-        masterImageData, # reference geometry
+        sourceImageData, # reference geometry
         self.scriptedEffect.parameterSetNode().GetSelectedSegmentID(),
         self.scriptedEffect.parameterSetNode().GetMaskSegmentID() if self.scriptedEffect.parameterSetNode().GetMaskSegmentID() else "",
-        masterImageData if intensityBasedMasking else None,
+        sourceImageData if intensityBasedMasking else None,
         self.scriptedEffect.parameterSetNode().GetMasterVolumeIntensityMaskRange() if intensityBasedMasking else None)
     if success:
       stencil = vtk.vtkImageToImageStencil()

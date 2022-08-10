@@ -64,11 +64,11 @@ class SegmentEditorFloodFillingTest(ScriptedLoadableModuleTest):
     from SegmentStatistics import SegmentStatisticsLogic
 
     ##################################
-    self.delayDisplay("Load master volume")
+    self.delayDisplay("Load source volume")
 
     import SampleData
     sampleDataLogic = SampleData.SampleDataLogic()
-    masterVolumeNode = sampleDataLogic.downloadMRBrainTumor1()
+    sourceVolumeNode = sampleDataLogic.downloadMRBrainTumor1()
 
     ##################################
     self.delayDisplay("Create segmentation containing a few spheres")
@@ -76,7 +76,7 @@ class SegmentEditorFloodFillingTest(ScriptedLoadableModuleTest):
     segmentationNode = slicer.vtkMRMLSegmentationNode()
     slicer.mrmlScene.AddNode(segmentationNode)
     segmentationNode.CreateDefaultDisplayNodes()
-    segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(masterVolumeNode)
+    segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(sourceVolumeNode)
 
     # Segments are defined by a list of: name and a list of sphere [radius, posX, posY, posZ]
     segmentGeometries = [
@@ -108,9 +108,9 @@ class SegmentEditorFloodFillingTest(ScriptedLoadableModuleTest):
     segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
     segmentEditorWidget.setSegmentationNode(segmentationNode)
     if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      segmentEditorWidget.setSourceVolumeNode(masterVolumeNode)
+      segmentEditorWidget.setSourceVolumeNode(sourceVolumeNode)
     else:
-      segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
+      segmentEditorWidget.setMasterVolumeNode(sourceVolumeNode)
 
     ##################################
     self.delayDisplay("Run segmentation")
@@ -129,7 +129,7 @@ class SegmentEditorFloodFillingTest(ScriptedLoadableModuleTest):
     self.delayDisplay("Compute statistics")
 
     segStatLogic = SegmentStatisticsLogic()
-    segStatLogic.computeStatistics(segmentationNode, masterVolumeNode)
+    segStatLogic.computeStatistics(segmentationNode, sourceVolumeNode)
 
     # Export results to table (just to see all results)
     resultsTableNode = slicer.vtkMRMLTableNode()
