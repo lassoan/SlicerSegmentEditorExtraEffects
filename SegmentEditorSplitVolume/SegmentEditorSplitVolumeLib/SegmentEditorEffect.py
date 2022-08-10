@@ -1,38 +1,38 @@
 # This is a complete example that computes histogram for each region of a volume defined by a segment.
 # This script requires installation of  SegmentEditorExtraEffects extension, as it uses the Split volume effect,
 # which is provided by this extension.
- 
+
 import os
 import vtk, qt, ctk, slicer
 import logging
 from SegmentEditorEffects import *
-import vtkSegmentationCorePython as vtkSegmentationCore 
+import vtkSegmentationCorePython as vtkSegmentationCore
 import sitkUtils
 import SimpleITK as sitk
 
- 
+
 class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   """This effect creates a volume for each segment, cropped to the segment extent with optional padding."""
- 
+
   def __init__(self, scriptedEffect):
     scriptedEffect.name = 'Split volume'
     scriptedEffect.perSegment = True # this effect operates on a single selected segment
     AbstractScriptedSegmentEditorEffect.__init__(self, scriptedEffect)
- 
+
   def clone(self):
     # It should not be necessary to modify this method
     import qSlicerSegmentationsEditorEffectsPythonQt as effects
     clonedEffect = effects.qSlicerSegmentEditorScriptedEffect(None)
     clonedEffect.setPythonSource(__file__.replace('\\','/'))
     return clonedEffect
- 
+
   def icon(self):
     # It should not be necessary to modify this method
     iconPath = os.path.join(os.path.dirname(__file__), 'SegmentEditorEffect.png')
     if os.path.exists(iconPath):
       return qt.QIcon(iconPath)
     return qt.QIcon()
- 
+
   def helpText(self):
     return """Create a volume node for each visible segment, or only the selected segment, cropped to the segment extent.\n
 Extent is expanded by the specified number of padding voxels along each axis. Voxels outside the segment are set to the requested fill value.
@@ -58,22 +58,22 @@ Generated volumes are not affected by segmentation undo/redo operations.
     except:
       self.padEdit.setValue(5)
     self.padEdit.blockSignals(wasBlocked)
-    
+
     wasBlocked = self.applyToAllVisibleSegmentsCheckBox.blockSignals(True)
-    checked = (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0) 
+    checked = (self.scriptedEffect.integerParameter("ApplyToAllVisibleSegments") != 0)
     self.applyToAllVisibleSegmentsCheckBox.setChecked(checked)
     self.applyToAllVisibleSegmentsCheckBox.blockSignals(wasBlocked)
- 
+
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("FillValue", self.fillValueEdit.value)
     self.scriptedEffect.setParameter("PaddingVoxels", self.padEdit.value)
     self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
-    
+
   def onAllSegmentsCheckboxStateChanged(self, newState):
     self.scriptedEffect.setParameter("ApplyToAllVisibleSegments", "1" if  (self.applyToAllVisibleSegmentsCheckBox.isChecked()) else "0")
 
   def setupOptionsFrame(self):
-     
+
     # input volume selector
     self.inputVolumeSelector = slicer.qMRMLNodeComboBox()
     self.inputVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
@@ -86,11 +86,11 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.inputVolumeSelector.setMRMLScene(slicer.mrmlScene)
     self.inputVolumeSelector.setToolTip("Volume to split. Default is current master volume node.")
     self.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
- 
+
     inputLayout = qt.QHBoxLayout()
     inputLayout.addWidget(self.inputVolumeSelector)
     self.scriptedEffect.addLabeledOptionsWidget("Input Volume: ", inputLayout)
-     
+
     # Pad size
     self.padEdit = qt.QSpinBox()
     self.padEdit.setToolTip("Choose the number of voxels used to pad the image in each dimension")
@@ -98,14 +98,14 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.padEdit.maximum = 1000
     self.padEdit.connect("valueChanged(int)", self.updateMRMLFromGUI)
     self.padLabel = qt.QLabel("Pad voxels: ")
-    
+
     # Fill value layouts
     # addWidget(*Widget, row, column, rowspan, colspan)
     padValueLayout = qt.QFormLayout()
     padValueLayout.addRow(self.padLabel, self.padEdit)
 
     self.scriptedEffect.addOptionsWidget(padValueLayout)
-    
+
     self.fillValueEdit = qt.QSpinBox()
     self.fillValueEdit.setToolTip("Choose the voxel intensity that will be used to pad the output volumes.")
     self.fillValueEdit.minimum = -32768
@@ -113,11 +113,11 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.fillValueEdit.value=0
     self.fillValueEdit.connect("valueChanged(int)", self.updateMRMLFromGUI)
     self.fillValueLabel = qt.QLabel("Fill value: ")
-    
+
     fillValueLayout = qt.QFormLayout()
     fillValueLayout.addRow(self.fillValueLabel, self.fillValueEdit)
     self.scriptedEffect.addOptionsWidget(fillValueLayout)
-    
+
     # Segment scope checkbox layout
     self.applyToAllVisibleSegmentsCheckBox = qt.QCheckBox()
     self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
@@ -125,7 +125,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.scriptedEffect.addLabeledOptionsWidget("Apply to visible segments: ", self.applyToAllVisibleSegmentsCheckBox)
     # Connection
     self.applyToAllVisibleSegmentsCheckBox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
-    
+
     # Apply button
     self.applyButton = qt.QPushButton("Apply")
     self.applyButton.objectName = self.__class__.__name__ + 'Apply'
@@ -136,13 +136,16 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def createCursor(self, widget):
     # Turn off effect-specific cursor for this effect
     return slicer.util.mainWindow().cursor
-      
+
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
     if inputVolume is None:
-      inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+      if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+        inputVolume = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
+      else:
+        inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
     return inputVolume
-  
+
   def onApply(self):
     import SegmentEditorEffects
     if not hasattr(SegmentEditorEffects,'SegmentEditorMaskVolumeEffect'):
@@ -159,9 +162,9 @@ Generated volumes are not affected by segmentation undo/redo operations.
     scene = inputVolume.GetScene()
     padExtent = [-self.padEdit.value, self.padEdit.value, -self.padEdit.value, self.padEdit.value, -self.padEdit.value, self.padEdit.value]
     fillValue = self.fillValueEdit.value
-    
+
     # Create a new folder in subject hierarchy where all the generated volumes will be placed into
-    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene) 
+    shNode = slicer.vtkMRMLSubjectHierarchyNode.GetSubjectHierarchyNode(slicer.mrmlScene)
     inputVolumeParentItem = shNode.GetItemParent(shNode.GetItemByDataNode(inputVolume))
     outputShFolder = shNode.CreateFolderItem(inputVolumeParentItem, inputVolume.GetName()+" split")
 
@@ -180,11 +183,11 @@ Generated volumes are not affected by segmentation undo/redo operations.
       # Create volume for output
       outputVolumeName = inputVolume.GetName() + ' ' + segmentationNode.GetSegmentation().GetSegment(segmentID).GetName()
       outputVolume = volumesLogic.CloneVolumeGeneric(scene, inputVolume, outputVolumeName, False)
-      
+
       # Crop segment
       maskExtent = [0] * 6
       maskVolumeWithSegment(segmentationNode, segmentID, "FILL_OUTSIDE", [fillValue], inputVolume, outputVolume, maskExtent)
-      
+
       # Calculate padded extent of segment
       extent = [0] * 6
       for i in range(len(extent)):

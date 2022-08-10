@@ -88,7 +88,10 @@ class SegmentEditorEngraveTest(ScriptedLoadableModuleTest):
     slicer.mrmlScene.AddNode(segmentEditorNode)
     segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
     segmentEditorWidget.setSegmentationNode(segmentationNode)
-    segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      segmentEditorWidget.setSourceVolumeNode(masterVolumeNode)
+    else:
+      segmentEditorWidget.setMasterVolumeNode(masterVolumeNode)
 
     ##################################
     self.delayDisplay("Run segmentation")

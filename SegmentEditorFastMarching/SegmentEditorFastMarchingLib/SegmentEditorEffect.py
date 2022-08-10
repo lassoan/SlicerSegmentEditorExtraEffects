@@ -63,7 +63,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.marcher.enabled = False
     self.marcher.connect('valueChanged(double)',self.onMarcherChanged)
     self.percentVolume = self.scriptedEffect.addLabeledOptionsWidget("Segment volume:", self.marcher)
-    
+
     self.cancelButton = qt.QPushButton("Cancel")
     self.cancelButton.objectName = self.__class__.__name__ + 'Cancel'
     self.cancelButton.setToolTip("Clear preview and cancel")
@@ -99,7 +99,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
 
   def updateMRMLFromGUI(self):
     self.scriptedEffect.setParameter("PercentMax", self.percentMax.value)
-        
+
   def onMarch(self):
     # This can be a long operation - indicate it to the user
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
@@ -125,10 +125,13 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
   def fastMarching(self,percentMax):
 
     self.fm = None
-    
+
     # Get master volume image data
     import vtkSegmentationCorePython as vtkSegmentationCore
-    masterImageData = self.scriptedEffect.masterVolumeImageData()
+    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
+      masterImageData = self.scriptedEffect.sourceVolumeImageData()
+    else:
+      masterImageData = self.scriptedEffect.masterVolumeImageData()
     # Get segmentation
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
 
@@ -149,7 +152,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
       segmentationNode.GetSegmentation().SeparateSegmentLabelmap(self.scriptedEffect.parameterSetNode().GetSelectedSegmentID())
 
     selectedSegmentLabelmap = self.scriptedEffect.selectedSegmentLabelmap()
-    
+
     if not self.originalSelectedSegmentLabelmap:
       self.originalSelectedSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
       self.originalSelectedSegmentLabelmap.DeepCopy(selectedSegmentLabelmap)
@@ -165,8 +168,8 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     thresh.SetOutValue(labelValue)
     thresh.SetOutputScalarType(vtk.VTK_UNSIGNED_SHORT)
     thresh.Update()
-    labelImage = thresh.GetOutput()    
-    
+    labelImage = thresh.GetOutput()
+
     # collect seeds
     dim = masterImageData.GetDimensions()
     # initialize the filter
@@ -217,7 +220,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     if nSeeds == 0:
       self.totalNumberOfVoxels = 0
       return
-      
+
     self.fm.Modified()
     self.fm.Update()
 
@@ -231,11 +234,11 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.updateLabel(self.marcher.value/self.marcher.maximum)
 
     logging.info('FastMarching march update completed')
-    
+
   def updateLabel(self,value):
     if not self.fm:
       return
-     
+
     self.fm.show(value)
     self.fm.Modified()
     self.fm.Update()
@@ -244,9 +247,9 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
     newSegmentLabelmap.ShallowCopy(self.fm.GetOutput())
     newSegmentLabelmap.CopyDirections(self.originalSelectedSegmentLabelmap)
-    
+
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent()) 
+    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent())
 
   def reset(self):
 
@@ -254,12 +257,12 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     if self.originalSelectedSegmentLabelmap:
       import vtkSegmentationCorePython as vtkSegmentationCore
       segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(self.originalSelectedSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, self.originalSelectedSegmentLabelmap.GetExtent()) 
-      
+      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(self.originalSelectedSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, self.originalSelectedSegmentLabelmap.GetExtent())
+
     self.originalSelectedSegmentLabelmap = None
     self.selectedSegmentId = None
     self.fm = None
-    
+
     self.updateGUIFromMRML()
 
   def onCancel(self):
