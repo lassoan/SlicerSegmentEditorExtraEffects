@@ -10,6 +10,7 @@ import math
 class SegmentEditorEffect(SegmentEditorThresholdEffect):
   """ LocalThresholdEffect is an effect that can perform a localized threshold when the user ctrl-clicks on the image.
   """
+  ROI_NODE_REFERENCE_ROLE = "LocalThreshold.ROI"
 
   def __init__(self, scriptedEffect):
     SegmentEditorThresholdEffect.__init__(self, scriptedEffect)
@@ -166,6 +167,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
     self.roiSelector.noneEnabled = True
     self.roiSelector.setMRMLScene(slicer.mrmlScene)
     self.scriptedEffect.addLabeledOptionsWidget("ROI: ", self.roiSelector)
+    self.roiSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateMRMLFromGUI)
 
     # Connections
     self.minimumDiameterSpinBox.connect("valueChanged(double)", self.updateMRMLFromGUI)
@@ -210,6 +212,9 @@ Fill segment in a selected region based on master volume intensity range<br>.
       self.kernelSizePixel.text = f"{abs(kernelSizePixel[0])}x{abs(kernelSizePixel[1])}x{abs(kernelSizePixel[2])} pixels"
       self.applyButton.setEnabled(True)
 
+    wasBlocked = self.roiSelector.blockSignals(True)
+    self.roiSelector.setCurrentNode(self.scriptedEffect.parameterSetNode().GetNodeReference(self.ROI_NODE_REFERENCE_ROLE))
+    self.roiSelector.blockSignals(wasBlocked)
 
   def updateMRMLFromGUI(self):
     SegmentEditorThresholdEffect.updateMRMLFromGUI(self)
@@ -222,6 +227,8 @@ Fill segment in a selected region based on master volume intensity range<br>.
 
     segmentationAlgorithm = self.segmentationAlgorithmSelector.currentText
     self.scriptedEffect.setParameter(SEGMENTATION_ALGORITHM_PARAMETER_NAME, segmentationAlgorithm)
+
+    self.scriptedEffect.parameterSetNode().SetNodeReferenceID(self.ROI_NODE_REFERENCE_ROLE, self.roiSelector.currentNodeID)
 
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
@@ -363,7 +370,7 @@ Fill segment in a selected region based on master volume intensity range<br>.
       intensityRange = [max(oldIntensityMaskRange[0], minimumThreshold), min(oldIntensityMaskRange[1], maximumThreshold)]
     parameterSetNode.SetMasterVolumeIntensityMaskRange(intensityRange)
 
-    roiNode = self.roiSelector.currentNode()
+    roiNode = self.scriptedEffect.parameterSetNode().GetNodeReference(self.ROI_NODE_REFERENCE_ROLE)
     if roiNode is not None:
       clippedMasterImageData = SegmentEditorEffect.cropOrientedImage(masterImageData, roiNode)
     else:
