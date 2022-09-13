@@ -122,7 +122,7 @@ Generated volumes are not affected by segmentation undo/redo operations.
     self.applyToAllVisibleSegmentsCheckBox = qt.QCheckBox()
     self.applyToAllVisibleSegmentsCheckBox.setChecked(True)
     self.applyToAllVisibleSegmentsCheckBox.setToolTip("Apply to all visible segments, or only the selected segment.")
-    self.scriptedEffect.addLabeledOptionsWidget("Apply to all segments: ", self.applyToAllVisibleSegmentsCheckBox)
+    self.scriptedEffect.addLabeledOptionsWidget("Apply to visible segments: ", self.applyToAllVisibleSegmentsCheckBox)
     # Connection
     self.applyToAllVisibleSegmentsCheckBox.connect('stateChanged(int)', self.onAllSegmentsCheckboxStateChanged)
     
