@@ -140,20 +140,12 @@ Generated volumes are not affected by segmentation undo/redo operations.
   def getInputVolume(self):
     inputVolume = self.inputVolumeSelector.currentNode()
     if inputVolume is None:
-      if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-        inputVolume = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
-      else:
-        inputVolume = self.scriptedEffect.parameterSetNode().GetMasterVolumeNode()
+      inputVolume = self.scriptedEffect.parameterSetNode().GetSourceVolumeNode()
     return inputVolume
 
   def onApply(self):
     import SegmentEditorEffects
-    if not hasattr(SegmentEditorEffects,'SegmentEditorMaskVolumeEffect'):
-      # Slicer 4.11 and earlier - Mask volume is in an extension
-      import SegmentEditorMaskVolumeLib
-      maskVolumeWithSegment = SegmentEditorMaskVolumeLib.SegmentEditorEffect.maskVolumeWithSegment
-    else:
-      maskVolumeWithSegment = SegmentEditorEffects.SegmentEditorMaskVolumeEffect.maskVolumeWithSegment
+    maskVolumeWithSegment = SegmentEditorEffects.SegmentEditorMaskVolumeEffect.maskVolumeWithSegment
 
     inputVolume = self.getInputVolume()
     currentSegmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()

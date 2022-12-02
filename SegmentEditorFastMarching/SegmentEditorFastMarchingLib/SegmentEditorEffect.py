@@ -128,10 +128,7 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
 
     # Get source volume image data
     import vtkSegmentationCorePython as vtkSegmentationCore
-    if slicer.app.majorVersion == 5 and slicer.app.minorVersion >= 1:
-      sourceImageData = self.scriptedEffect.sourceVolumeImageData()
-    else:
-      sourceImageData = self.scriptedEffect.masterVolumeImageData()
+    sourceImageData = self.scriptedEffect.sourceVolumeImageData()
     # Get segmentation
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
 
