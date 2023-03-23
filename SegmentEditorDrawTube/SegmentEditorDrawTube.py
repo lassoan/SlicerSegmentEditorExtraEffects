@@ -43,6 +43,7 @@ class SegmentEditorDrawTubeTest(ScriptedLoadableModuleTest):
     """
     self.setUp()
     self.test_DrawTube1()
+    self.test_DrawTube2()
 
   def test_DrawTube1(self):
     """
@@ -153,3 +154,85 @@ class SegmentEditorDrawTubeTest(ScriptedLoadableModuleTest):
     self.assertEqual( round(stats['Tumor', 'LabelmapSegmentStatisticsPlugin.volume_mm3']), 19498.0)
 
     self.delayDisplay('test_DrawTube1 passed')
+
+  def test_DrawTube2(self):
+    """
+    A test to confirm appropriate number of nodes created during use of the effect.
+    The test can be executed from SelfTests module (test name: SegmentEditorDrawTube)
+    """
+    self.delayDisplay("Starting test_DrawTube2")
+
+    ##################################
+    self.delayDisplay("Load source volume")
+
+    import SampleData
+    sourceVolumeNode = SampleData.SampleDataLogic().downloadMRHead()
+
+    ##################################
+    self.delayDisplay("Create segmentation")
+
+    segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+    segmentationNode.CreateDefaultDisplayNodes()
+    segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(sourceVolumeNode)
+    segmentationNode.GetSegmentation().AddEmptySegment("FirstSegment")
+
+    ##################################
+    self.delayDisplay("Create segment editor")
+
+    segmentEditorWidget = slicer.qMRMLSegmentEditorWidget()
+    segmentEditorWidget.show()
+    segmentEditorWidget.setMRMLScene(slicer.mrmlScene)
+    segmentEditorNode = slicer.vtkMRMLSegmentEditorNode()
+    slicer.mrmlScene.AddNode(segmentEditorNode)
+    segmentEditorWidget.setMRMLSegmentEditorNode(segmentEditorNode)
+    segmentEditorWidget.setSegmentationNode(segmentationNode)
+    segmentEditorWidget.setSourceVolumeNode(sourceVolumeNode)
+
+    # Get the original fiducial display node count
+    segmentEditorWidget.setCurrentSegmentID("FirstSegment")
+    original_fiducial_display_node_count = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLMarkupsFiducialDisplayNode")
+    print(f"Number of fiducial display nodes after adding a segment: {original_fiducial_display_node_count}")
+
+    # Set active effect and compare display node count
+    segmentEditorWidget.setActiveEffectByName("Draw tube")
+    fiducial_display_node_count = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLMarkupsFiducialDisplayNode")
+    print(f"Number of fiducial display nodes after setting Draw tube as active effect: {fiducial_display_node_count}")
+    self.assertEqual(fiducial_display_node_count, original_fiducial_display_node_count + 1)
+
+    # Add Draw tube points and apply. Then compare display node count
+    active_effect = segmentEditorWidget.activeEffect()
+    active_effect.self().fiducialPlacementToggle.placeButton().click()
+    red_slice = slicer.app.layoutManager().sliceWidget('Red')
+    height = red_slice.height
+    width = red_slice.width
+    point1 = [0 + width//2, 18 + height//2, -10]
+    point2 = [33 + width//2, -18 + height//2, -10]
+    point3 = [-33 + width//2, -18 + height//2, -10]
+    slicer.util.clickAndDrag(red_slice, start=point1, end=point1,button='Left')
+    slicer.util.clickAndDrag(red_slice, start=point2, end=point2,button='Left')
+    slicer.util.clickAndDrag(red_slice, start=point3, end=point3,button='Left')
+    active_effect.self().onApply()
+    fiducial_display_node_count = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLMarkupsFiducialDisplayNode")
+    print(f"Number of fiducial display nodes after applying the Draw tube effect: {fiducial_display_node_count}")
+    self.assertEqual(fiducial_display_node_count, original_fiducial_display_node_count + 1)
+
+    # Add a second segment, add Draw tube points and apply. Then compare display node count
+    segmentationNode.GetSegmentation().AddEmptySegment("SecondSegment")
+    segmentEditorWidget.setCurrentSegmentID("SecondSegment")
+    active_effect.self().fiducialPlacementToggle.placeButton().click()
+    point1 = [0 + width//2, -50 + height//2, -10]
+    point2 = [33 + width//2, -90 + height//2, -10]
+    point3 = [-33 + width//2, -90 + height//2, -10]
+    slicer.util.clickAndDrag(red_slice, start=point1, end=point1,button='Left')
+    slicer.util.clickAndDrag(red_slice, start=point2, end=point2,button='Left')
+    slicer.util.clickAndDrag(red_slice, start=point3, end=point3,button='Left')
+    active_effect.self().onApply()
+    fiducial_display_node_count = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLMarkupsFiducialDisplayNode")
+    print(f"Number of fiducial display nodes after applying the Draw tube effect for a 2nd segment: {fiducial_display_node_count}")
+    self.assertEqual(fiducial_display_node_count, original_fiducial_display_node_count + 1)
+
+    # Set active effect to None. Then compare display node count
+    segmentEditorWidget.setActiveEffectByName("None")
+    fiducial_display_node_count = slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLMarkupsFiducialDisplayNode")
+    print(f"Number of fiducial display nodes after switching the active effect to None: {fiducial_display_node_count}")
+    self.assertEqual(fiducial_display_node_count, original_fiducial_display_node_count)
