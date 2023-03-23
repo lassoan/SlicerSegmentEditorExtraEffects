@@ -340,21 +340,26 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
-      displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
-      displayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
-      displayNode.SetTextScale(0)
       self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
       self.segmentMarkupNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
+      self.segmentMarkupNode.CreateDefaultDisplayNodes()  # creates a display node if there is not one already for this node
+      displayNode = self.segmentMarkupNode.GetDisplayNode()
+      displayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
+      displayNode.SetTextScale(0)
+      # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
+      # towards the camera as the point is moved.
+      displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
+      # Prevent "Edit properties..." from being displayed
       # (Edit properties would switch module, which would deactive the effect, thus remove the markups node
       # while the markups node's event is being processed, causing a crash)
       self.segmentMarkupNode.SetHideFromEditors(True)
+
       # Only show "Delete point" action in view context menu to not allow the user to delete the node
       pluginHandler = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
       pluginLogic = pluginHandler.pluginLogic()
       itemId = pluginHandler.subjectHierarchyNode().GetItemByDataNode(self.segmentMarkupNode)
       pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
       self.segmentMarkupNode.SetName('T')
-      self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
 

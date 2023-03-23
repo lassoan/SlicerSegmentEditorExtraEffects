@@ -328,14 +328,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   def createNewMarkupNode(self):
     # Create empty markup fiducial node
     if self.segmentMarkupNode is None:
-      displayNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsDisplayNode")
+      self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+      self.segmentMarkupNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
+      self.segmentMarkupNode.CreateDefaultDisplayNodes()  # creates a display node if there is not one already for this node
+      displayNode = self.segmentMarkupNode.GetDisplayNode()
       displayNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       displayNode.SetTextScale(0)
       # Need to disable snapping to visible surface, as it would result in the surface iteratively crawling
       # towards the camera as the point is moved.
       displayNode.SetSnapMode(displayNode.SnapModeUnconstrained)
-      self.segmentMarkupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-      self.segmentMarkupNode.SetSaveWithScene(False)  # prevent temporary node from being saved into the scene
       # Prevent "Edit properties..." from being displayed
       # (Edit properties would switch module, which would deactive the effect, thus remove the markups node
       # while the markups node's event is being processed, causing a crash)
@@ -348,7 +349,6 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       pluginLogic.setAllowedViewContextMenuActionNamesForItem(itemId, ["DeletePointAction"])
 
       self.segmentMarkupNode.SetName('C')
-      self.segmentMarkupNode.SetAndObserveDisplayNodeID(displayNode.GetID())
       self.setAndObserveSegmentMarkupNode(self.segmentMarkupNode)
       self.updateGUIFromMRML()
 
