@@ -153,6 +153,7 @@ Fill segment in a selected region based on source volume intensity range<br>.
     self.scriptedEffect.setParameterDefault(FEATURE_SIZE_MM_PARAMETER_NAME, 3)
     self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_GROWCUT)
     self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
+    self.scriptedEffect.setParameterDefault("TURN_OFF_INTERACTIONS", str(False))
     SegmentEditorThresholdEffect.setMRMLDefaults(self)
 
   def updateGUIFromMRML(self):
@@ -206,6 +207,9 @@ Fill segment in a selected region based on source volume intensity range<br>.
 
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
+
+    if self.scriptedEffect.parameter("TURN_OFF_INTERACTIONS") == "True":
+      return abortEvent
 
     if not callerInteractor.GetControlKey():
       return SegmentEditorThresholdEffect.processInteractionEvents(self, callerInteractor, eventId, viewWidget)
