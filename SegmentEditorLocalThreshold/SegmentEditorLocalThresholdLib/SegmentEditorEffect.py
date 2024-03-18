@@ -46,55 +46,52 @@ Fill segment in a selected region based on source volume intensity range<br>.
 </p>
 </html>"""
 
-  def setCurrentSegmentTransparent(self):
-    pass
+  def updatePreviewedSegmentTransparency(self):
+    # Overridden since we want to continue to show the previewed segment
+    SegmentEditorThresholdEffect.updatePreviewedSegmentTransparency(self)
 
-  def restorePreviewedSegmentTransparency(self):
-    pass
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    if not segmentationNode:
+      return
+
+    displayNode = segmentationNode.GetDisplayNode() if segmentationNode else None
+    if not displayNode:
+      return
+
+    if self.previewedSegmentID is None:
+      return
+
+    # We want to continue to show the previewed segment with the same transparency as the other segments
+    displayNode.SetSegmentOpacity2DFill(self.previewedSegmentID, self.segment2DFillOpacity)
+    displayNode.SetSegmentOpacity2DOutline(self.previewedSegmentID, self.segment2DOutlineOpacity)
 
   def preview(self):
-    opacity = 0.1 + (0.8 * self.previewState / self.previewSteps)
-    min = self.scriptedEffect.doubleParameter("MinimumThreshold")
-    max = self.scriptedEffect.doubleParameter("MaximumThreshold")
+    # Overridden since we want to change the previewed segment color
+    SegmentEditorThresholdEffect.preview(self)
 
-    # Get color of edited segment
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     if not segmentationNode:
       # scene was closed while preview was active
       return
-    displayNode = segmentationNode.GetDisplayNode()
-    if displayNode is None:
-      logging.error("preview: Invalid segmentation display node!")
-      color = [0.5,0.5,0.5]
-    segmentID = self.scriptedEffect.parameterSetNode().GetSelectedSegmentID()
-    if segmentID is None:
-      return
-
-    # Make sure we keep the currently selected segment hidden (the user may have changed selection)
-    if segmentID != self.previewedSegmentID:
-      self.setCurrentSegmentTransparent()
-
-    # Change color hue slightly to make it easier to distinguish filled regions from preview
-    r,g,b = segmentationNode.GetSegmentation().GetSegment(segmentID).GetColor()
-    import colorsys
-    colorHsv = colorsys.rgb_to_hsv(r, g, b)
-    (r, g, b) = colorsys.hsv_to_rgb((colorHsv[0]+0.2) % 1.0, colorHsv[1], colorHsv[2])
 
     # Set values to pipelines
     for sliceWidget in self.previewPipelines:
       pipeline = self.previewPipelines[sliceWidget]
-      pipeline.lookupTable.SetTableValue(1,  r, g, b,  opacity)
-      layerLogic = self.getSourceVolumeLayerLogic(sliceWidget)
-      pipeline.thresholdFilter.SetInputConnection(layerLogic.GetReslice().GetOutputPort())
-      pipeline.thresholdFilter.ThresholdBetween(min, max)
-      pipeline.actor.VisibilityOn()
-      sliceWidget.sliceView().scheduleRender()
 
-    self.previewState += self.previewStep
-    if self.previewState >= self.previewSteps:
-      self.previewStep = -1
-    if self.previewState <= 0:
-      self.previewStep = 1
+      currentColor = [0.0, 0.0, 0.0, 0.0]
+      pipeline.lookupTable.GetTableValue(1, currentColor)
+      r = currentColor[0]
+      g = currentColor[1]
+      b = currentColor[2]
+      opacity = currentColor[3]
+
+      # Change color hue slightly to make it easier to distinguish filled regions from preview
+      import colorsys
+      colorHsv = colorsys.rgb_to_hsv(r, g, b)
+      (r, g, b) = colorsys.hsv_to_rgb((colorHsv[0]+0.2) % 1.0, colorHsv[1], colorHsv[2])
+
+      pipeline.lookupTable.SetTableValue(1,  r, g, b,  opacity)
+      sliceWidget.sliceView().scheduleRender()
 
   def setupOptionsFrame(self):
     SegmentEditorThresholdEffect.setupOptionsFrame(self)
