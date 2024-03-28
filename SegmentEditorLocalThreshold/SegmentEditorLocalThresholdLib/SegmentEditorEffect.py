@@ -150,6 +150,7 @@ Fill segment in a selected region based on source volume intensity range<br>.
     self.scriptedEffect.setParameterDefault(FEATURE_SIZE_MM_PARAMETER_NAME, 3)
     self.scriptedEffect.setParameterDefault(SEGMENTATION_ALGORITHM_PARAMETER_NAME, SEGMENTATION_ALGORITHM_GROWCUT)
     self.scriptedEffect.setParameterDefault(HISTOGRAM_BRUSH_TYPE_PARAMETER_NAME, HISTOGRAM_BRUSH_TYPE_DRAW)
+    self.scriptedEffect.setParameterDefault(ENABLE_SLICE_VIEW_INTERACTION_PARAMETER_NAME, 1)
     SegmentEditorThresholdEffect.setMRMLDefaults(self)
 
   def updateGUIFromMRML(self):
@@ -203,6 +204,9 @@ Fill segment in a selected region based on source volume intensity range<br>.
 
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
+
+    if not self.scriptedEffect.integerParameter(ENABLE_SLICE_VIEW_INTERACTION_PARAMETER_NAME):
+      return abortEvent
 
     if not callerInteractor.GetControlKey():
       return SegmentEditorThresholdEffect.processInteractionEvents(self, callerInteractor, eventId, viewWidget)
@@ -563,3 +567,5 @@ BACKGROUND_VALUE = 0
 LABEL_VALUE = 1
 SELECTED_ISLAND_VALUE = 2
 OUTSIDE_THRESHOLD_VALUE = 3
+
+ENABLE_SLICE_VIEW_INTERACTION_PARAMETER_NAME = "ENABLE_SLICE_VIEW_INTERACTION"
