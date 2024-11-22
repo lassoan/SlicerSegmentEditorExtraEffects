@@ -1,5 +1,5 @@
 import os
-import vtk, qt, slicer
+import vtk, qt, slicer, ctk
 import logging
 from SegmentEditorEffects import *
 
@@ -63,6 +63,33 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     fiducialActionLayout.addWidget(self.fiducialPlacementToggle)
     fiducialActionLayout.addWidget(self.editButton)
     self.scriptedEffect.addLabeledOptionsWidget("Fiducial Placement: ", fiducialActionLayout)
+
+    # Advanced options collapsible button
+    self.advancedPlacementCollapsibleGroup = ctk.ctkCollapsibleGroupBox()
+    self.advancedPlacementCollapsibleGroup.title = "Advanced"
+    self.advancedPlacementCollapsibleGroup.collapsed = True
+    self.scriptedEffect.addOptionsWidget(self.advancedPlacementCollapsibleGroup)
+
+    # Advanced options layout
+    advancedLayout = qt.QHBoxLayout(self.advancedPlacementCollapsibleGroup)
+
+    # Markup node selector
+    self.markupNodeSelector = slicer.qMRMLNodeComboBox()
+    self.markupNodeSelector.nodeTypes = ["vtkMRMLMarkupsLineNode", "vtkMRMLMarkupsCurveNode", "vtkMRMLMarkupsClosedCurveNode"]
+    self.markupNodeSelector.selectNodeUponCreation = True
+    self.markupNodeSelector.addEnabled = False
+    self.markupNodeSelector.removeEnabled = False
+    self.markupNodeSelector.noneEnabled = True
+    self.markupNodeSelector.showHidden = False
+    self.markupNodeSelector.showChildNodeTypes = False
+    self.markupNodeSelector.setMRMLScene(slicer.mrmlScene)
+    advancedLayout.addWidget(self.markupNodeSelector)
+
+    # Import button
+    self.importButton = qt.QPushButton("Import")
+    self.importButton.toolTip = "Import control points from selected markup node into segment markup node."
+    self.importButton.enabled = False
+    advancedLayout.addWidget(self.importButton)
 
     # Radius spinbox
     self.radiusSpinBox = slicer.qMRMLSpinBox()
@@ -134,6 +161,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.applyButton.connect('clicked()', self.onApply)
     self.cancelButton.connect('clicked()', self.onCancel)
     self.editButton.connect('clicked()', self.onEdit)
+    self.markupNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onMarkupNodeSelectorChanged)
+    self.importButton.connect('clicked()', self.onImportMarkupNode)
     self.fiducialPlacementToggle.placeButton().clicked.connect(self.onFiducialPlacementToggleChanged)
     self.radiusSpinBox.connect('valueChanged(double)', self.onRadiusChanged)
     self.numberOfLineSegmentsSpinBox.connect('valueChanged(int)', self.onNumberOfLineSegmentsChanged)
@@ -268,6 +297,18 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 
     self.editButton.setEnabled(False)
     self.updateModelFromSegmentMarkupNode()
+
+  def onMarkupNodeSelectorChanged(self, node):
+    self.importButton.enabled = node is not None
+
+  def onImportMarkupNode(self):
+    selectedMarkupNode = self.markupNodeSelector.currentNode()
+    if not selectedMarkupNode:
+      logging.warning("No markup node selected for import.")
+      return
+    if not self.segmentMarkupNode:
+      self.createNewMarkupNode()
+    self.logic.setPointsFromString(self.segmentMarkupNode, self.logic.getPointsAsString(selectedMarkupNode))
 
   def reset(self):
     if self.fiducialPlacementToggle.placeModeEnabled:
