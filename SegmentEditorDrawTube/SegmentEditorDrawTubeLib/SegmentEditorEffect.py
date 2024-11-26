@@ -79,7 +79,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.markupNodeSelector.selectNodeUponCreation = True
     self.markupNodeSelector.addEnabled = False
     self.markupNodeSelector.removeEnabled = False
-    self.markupNodeSelector.noneEnabled = True
+    self.markupNodeSelector.noneEnabled = False
     self.markupNodeSelector.showHidden = False
     self.markupNodeSelector.showChildNodeTypes = False
     self.markupNodeSelector.setMRMLScene(slicer.mrmlScene)
@@ -90,6 +90,8 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.importButton.toolTip = "Import control points from selected markup node into segment markup node."
     self.importButton.enabled = False
     advancedLayout.addWidget(self.importButton)
+
+    self.onMarkupNodeSelectorChanged(self.markupNodeSelector.currentNode())
 
     # Radius spinbox
     self.radiusSpinBox = slicer.qMRMLSpinBox()
@@ -308,7 +310,12 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       return
     if not self.segmentMarkupNode:
       self.createNewMarkupNode()
-    self.logic.setPointsFromString(self.segmentMarkupNode, self.logic.getPointsAsString(selectedMarkupNode))
+
+    pointsStr = self.logic.getPointsAsString(selectedMarkupNode)
+    if selectedMarkupNode.IsA("vtkMRMLMarkupsClosedCurveNode"):
+      # Close the curve by adding the coordinates of the first point to the end
+      pointsStr += " " + ' '.join(pointsStr.split()[0:3])
+    self.logic.setPointsFromString(self.segmentMarkupNode, pointsStr)
 
   def reset(self):
     if self.fiducialPlacementToggle.placeModeEnabled:
