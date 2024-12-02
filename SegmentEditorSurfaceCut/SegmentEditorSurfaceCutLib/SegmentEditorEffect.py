@@ -23,6 +23,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.segmentObserver = None
     self.buttonToOperationNameMap = {}
     self.pointsBeingEdited = ""  # list of coordinates of points that were being edited when the effect was deactivated
+    self.isEffectAvailable = False
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -43,6 +44,15 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
 </html>"""
 
   def setupOptionsFrame(self):
+
+    if not hasattr(slicer.modules, 'markupstomodel'):
+      logging.warning("SurfaceCutEffect is disabled because MarkupsToModel module is not available.")
+      errorLabel = qt.QLabel('<html><b><span style="color:red;">This effect requires MarkupsToModel extension.</span></b></html>')
+      self.scriptedEffect.addOptionsWidget(errorLabel)
+      return
+
+    self.isEffectAvailable = True
+
     self.operationRadioButtons = []
 
     #Fiducial Placement widget
@@ -129,6 +139,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.fiducialPlacementToggle.placeButton().clicked.connect(self.onFiducialPlacementToggleChanged)
 
   def activate(self):
+    if not self.isEffectAvailable:
+      return
+
     self.scriptedEffect.showEffectCursorInSliceView = False
     # Create model node prior to markup node to display markups over the model
     if not self.segmentModel:
@@ -147,6 +160,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
       self.logic.setPointsFromString(self.segmentMarkupNode, self.pointsBeingEdited)
 
   def deactivate(self):
+    if not self.isEffectAvailable:
+      return
+
     # Save points when the effect is deactivated to prevent the user from losing his work
     self.pointsBeingEdited = self.logic.getPointsAsString(self.segmentMarkupNode)
 
@@ -163,6 +179,9 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.scriptedEffect.setParameterDefault("SmoothModel", 1)
 
   def updateGUIFromMRML(self):
+    if not self.isEffectAvailable:
+      return
+
     if slicer.mrmlScene.IsClosing():
       return
 
