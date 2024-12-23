@@ -13,6 +13,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.clippedMasterImageData = None
     self.lastRoiNodeId = ""
     self.lastRoiNodeModifiedTime = 0
+    self.autoUpdateParametersFromSourceVolume = True
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -75,7 +76,7 @@ Masking settings can be used to restrict growing to a specific region.
     #return slicer.util.mainWindow().cursor
     return qt.QCursor(qt.Qt.PointingHandCursor)
 
-  def sourceVolumeNodeChanged(self):
+  def updateParametersFromSourceVolume(self):
     # Force recomputation of clipped source image data
     self.clippedMasterImageData = None
 
@@ -112,6 +113,10 @@ Masking settings can be used to restrict growing to a specific region.
     self.neighborhoodSizeMmSlider.maximum = 10**(math.ceil(math.log(minSpacing*100.0)/math.log(10)))
     self.neighborhoodSizeMmSlider.singleStep = self.neighborhoodSizeMmSlider.minimum
     self.neighborhoodSizeMmSlider.pageStep = self.neighborhoodSizeMmSlider.singleStep*10
+
+  def sourceVolumeNodeChanged(self):
+    if self.autoUpdateParametersFromSourceVolume:
+      self.updateParametersFromSourceVolume()
 
   def setMRMLDefaults(self):
     self.scriptedEffect.setParameterDefault("IntensityTolerance", 10.0)
