@@ -2,6 +2,8 @@ import os
 import vtk, qt, ctk, slicer
 import logging
 from SegmentEditorEffects import *
+import vtkSegmentationCorePython as vtkSegmentationCore
+
 
 class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
   """This effect uses FastMarching algorithm to partition the input volume"""
@@ -15,6 +17,7 @@ class SegmentEditorEffect(AbstractScriptedSegmentEditorEffect):
     self.fm = None
     self.totalNumberOfVoxels = 0
     self.voxelVolume = 0
+    self.previewSegmentationNode = None
 
   def clone(self):
     # It should not be necessary to modify this method
@@ -127,7 +130,6 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.fm = None
 
     # Get source volume image data
-    import vtkSegmentationCorePython as vtkSegmentationCore
     sourceImageData = self.scriptedEffect.sourceVolumeImageData()
     # Get segmentation
     segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
@@ -232,7 +234,25 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
 
     logging.info('FastMarching march update completed')
 
+  def initializePreviewNode(self):
+    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
+    if self.previewSegmentationNode is None:
+      self.previewSegmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+      self.previewSegmentationNode.SetName("Segmentation preview")
+      self.previewSegmentationNode.CreateDefaultDisplayNodes()
+      self.previewSegmentationNode.GetDisplayNode().SetVisibility2DOutline(False)
+      self.previewSegmentationNode.GetDisplayNode().SetOpacity(0.6)
+      if segmentationNode.GetParentTransformNode():
+        self.previewSegmentationNode.SetAndObserveTransformNodeID(segmentationNode.GetParentTransformNode().GetID())
+      newSegment = vtkSegmentationCore.vtkSegment()
+      currentSegment = segmentationNode.GetSegmentation().GetSegment(self.selectedSegmentId)
+      newSegment.SetColor(currentSegment.GetColor())
+      self.previewSegmentationNode.GetSegmentation().AddSegment(newSegment, self.selectedSegmentId)
+
   def updateLabel(self,value):
+    if self.previewSegmentationNode is None:
+      self.initializePreviewNode()
+
     if not self.fm:
       return
 
@@ -240,37 +260,31 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
     self.fm.Modified()
     self.fm.Update()
 
-    import vtkSegmentationCorePython as vtkSegmentationCore
     newSegmentLabelmap = vtkSegmentationCore.vtkOrientedImageData()
     newSegmentLabelmap.ShallowCopy(self.fm.GetOutput())
     newSegmentLabelmap.CopyDirections(self.originalSelectedSegmentLabelmap)
-
-    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent())
+    slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(newSegmentLabelmap, self.previewSegmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, newSegmentLabelmap.GetExtent())
 
   def reset(self):
-
-    # If original segment is available then restore that
-    if self.originalSelectedSegmentLabelmap:
-      import vtkSegmentationCorePython as vtkSegmentationCore
-      segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
-      slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(self.originalSelectedSegmentLabelmap, segmentationNode, self.selectedSegmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE, self.originalSelectedSegmentLabelmap.GetExtent())
-
+    if self.previewSegmentationNode is not None:
+      slicer.mrmlScene.RemoveNode(self.previewSegmentationNode)
+      self.previewSegmentationNode = None
     self.originalSelectedSegmentLabelmap = None
     self.selectedSegmentId = None
     self.fm = None
 
     self.updateGUIFromMRML()
 
+  def deactivate(self):
+    self.reset()
+
   def onCancel(self):
     self.reset()
 
   def onApply(self):
     # Apply changes
-    import vtkSegmentationCorePython as vtkSegmentationCore
-    segmentationNode = self.scriptedEffect.parameterSetNode().GetSegmentationNode()
     modifierLabelmap = vtkSegmentationCore.vtkOrientedImageData()
-    segmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId, modifierLabelmap)
+    self.previewSegmentationNode.GetBinaryLabelmapRepresentation(self.selectedSegmentId, modifierLabelmap)
     self.scriptedEffect.modifySelectedSegmentByLabelmap(modifierLabelmap, slicer.qSlicerSegmentEditorAbstractEffect.ModificationModeSet)
     self.originalSelectedSegmentLabelmap = None
 
