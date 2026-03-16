@@ -22,6 +22,9 @@
 #include <vtkPointData.h>
 #include <vtkStreamingDemandDrivenPipeline.h>
 
+// STD includes
+#include <iostream>
+
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 
@@ -1198,7 +1201,7 @@ int vtkPichonFastMarching::addSeed( float r, float a, float s )
 
       return 1;
     } else {
-      cout << "Point is outside image volume" << endl;
+      std::cout << "Point is outside image volume" << endl;
     }
 
   return 0; // we're trying to put a seed outside of the volume
@@ -1226,7 +1229,7 @@ int vtkPichonFastMarching::addSeedIJK( int I, int J, int K )
 
       return 1;
     } else {
-      cout << "Point is outside image volume" << endl;
+      std::cout << "Point is outside image volume" << endl;
     }
 
   return 0; // we're trying to put a seed outside of the volume

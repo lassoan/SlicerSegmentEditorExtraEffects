@@ -10,6 +10,9 @@
 // EditorLib includes
 #include "vtkPichonFastMarchingPDF.h"
 
+// STD includes
+#include <iostream>
+
 #ifdef _WIN32 // WINDOWS
 
   #include <float.h>
@@ -238,15 +241,15 @@ bool PichonFastMarchingPDF::isUnlikelyBigGauss( double k )
 
 void PichonFastMarchingPDF::show( void )
 {
-  cout << "realizationMax=" << realizationMax << endl;
-  cout << "nRealInBins=" <<  nRealInBins << endl;
-  cout << "mean=" << mean << endl;
-  cout << "sqrt( sigma2 )=" << sqrt( sigma2 ) << endl;
+  std::cout << "realizationMax=" << realizationMax << endl;
+  std::cout << "nRealInBins=" <<  nRealInBins << endl;
+  std::cout << "mean=" << mean << endl;
+  std::cout << "sqrt( sigma2 )=" << sqrt( sigma2 ) << endl;
 
   for(int k=0;k<=realizationMax;k++)
-    cout << value(k) << endl;
+    std::cout << value(k) << endl;
 
-  cout << "---" << endl;
+  std::cout << "---" << endl;
 }
 
 void PichonFastMarchingPDF::setMemory( int mem )
