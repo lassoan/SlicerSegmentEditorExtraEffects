@@ -203,6 +203,9 @@ Fill segment in a selected region based on source volume intensity range<br>.
 
     self.scriptedEffect.parameterSetNode().SetNodeReferenceID(self.ROI_NODE_REFERENCE_ROLE, self.roiSelector.currentNodeID)
 
+  # restore the effect-specific cursor in the case where the user has created a new ROI using the roiSelector combobox
+    slicer.modules.SegmentEditorWidget.editor.applySegmentEffectCursor(self.scriptedEffect)
+
   def processInteractionEvents(self, callerInteractor, eventId, viewWidget):
     abortEvent = False
 
