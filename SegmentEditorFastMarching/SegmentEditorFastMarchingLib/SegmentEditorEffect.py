@@ -195,14 +195,14 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
       scalarRange = sourceImageData.GetScalarRange()
       depth = scalarRange[1]-scalarRange[0]
 
+    # There are many other issues with the vtkPichonFastMarching filter
+    # (expects extents to start at 0, crashes in debug mode, etc).
     self.fm.init(dim[0], dim[1], dim[2], depth, 1, 1, 1)
 
     caster = vtk.vtkImageCast()
     caster.SetOutputScalarTypeToShort()
     caster.SetInputData(sourceImageData)
     self.fm.SetInputConnection(caster.GetOutputPort())
-
-    # self.fm.SetOutput(labelImage)
 
     npoints = int(dim[0]*dim[1]*dim[2]*percentMax/100.)
 
@@ -218,13 +218,6 @@ The effect uses <a href="http://www.spl.harvard.edu/publications/item/view/193">
       self.totalNumberOfVoxels = 0
       return
 
-    self.fm.Modified()
-    self.fm.Update()
-
-    # Need to call show() twice for data to be updated.
-    # There are many other issues with the vtkPichonFastMarching filter
-    # (expects extents to start at 0, crashes in debug mode, etc).
-    self.fm.show(1)
     self.fm.Modified()
     self.fm.Update()
 

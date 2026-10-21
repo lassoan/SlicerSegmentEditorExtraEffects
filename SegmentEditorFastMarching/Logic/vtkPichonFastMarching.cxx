@@ -16,7 +16,9 @@
 
 // VTK includes
 #include <vtkInformation.h>
+#include <vtkInformationVector.h>
 #include <vtkDataArray.h>
+#include <vtkErrorCode.h>
 #include <vtkMath.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
@@ -24,6 +26,8 @@
 
 // STD includes
 #include <iostream>
+#include <limits>
+#include <memory>
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -172,11 +176,15 @@ inline void vtkPichonFastMarching::getMedianInhomo( int index, int &med, int &in
 
 void vtkPichonFastMarching::initNewExpansion( void )
 {
+  if (!this->checkImagePointers())
+    return;
+
   if(invalidInputs)
     return;
 
   pdfIntensityIn->reset();
   pdfInhomoIn->reset();
+  pendingSeedStatistics.clear();
 
   // empty interface points
   while(tree.size()>0)
@@ -237,6 +245,7 @@ void vtkPichonFastMarching::initNewExpansion( void )
 
       index++;
     }
+  this->Modified();
 }
 
 int vtkPichonFastMarching::nValidSeeds( void )
@@ -277,7 +286,7 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
     for(k=0;k<self->dimZ;k++)
       {
       // update progress bar
-      int currentPercentage = GRANULARITY_PROGRESS * index / self->dimXYZ;
+      int currentPercentage = static_cast<vtkIdType>(GRANULARITY_PROGRESS) * index / self->dimXYZ;
       if (currentPercentage > lastPercentageProgressBarUpdated)
         {
         lastPercentageProgressBarUpdated = currentPercentage;
@@ -287,6 +296,7 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
         for (int i = 0; i<self->dimX; i++)
         {
           self->node[index].T = (float)INF;
+          self->node[index].leafIndex = -1;
 
           if (self->outdata[index] == 0)
             self->node[index].status = fmsFAR;
@@ -310,8 +320,13 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
         }
       }
 
-    return;
     }
+
+  // Preserve the observation order used when seeds were sampled on insertion.
+  for (int index : self->pendingSeedStatistics)
+    for (int neighbor = 0; neighbor <= 26; ++neighbor)
+      self->collectInfoSeed(index + self->shiftNeighbor(neighbor));
+  self->pendingSeedStatistics.clear();
 
   if( self->firstCall )
     {
@@ -321,7 +336,13 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
     //assert(self->seedPoints.size()>0);
     if(!(self->seedPoints.size()>0))
       {
-      vtkErrorWithObjectMacro(self, "Error in vtkPichonFastMarchingExecute: !(self->seedPoints.size()>0)" );
+      if (self->nPointsEvolution <= 0)
+        {
+        self->firstCall = true;
+        return;
+        }
+      self->SetErrorCode(vtkErrorCode::UserError);
+      vtkErrorWithObjectMacro(self, "Fast marching requires seeds before requesting growth.");
       self->firstCall=true; // we did not complete this step
       return;
       }
@@ -332,8 +353,7 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
     self->pdfInhomoIn->update();
     }
 
-  if(self->nPointsEvolution<=0)
-    // then we have nothing to do and we have just been called to update the pipeline
+  if (self->nPointsEvolution <= 0)
     return;
 
   // reinitialize the points that were removed by the user
@@ -420,7 +440,7 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
 
   for(n=0;n<self->nPointsEvolution;n++)
     {
-    if( (n*GRANULARITY_PROGRESS) % self->nPointsEvolution == 0 )
+    if( (static_cast<vtkIdType>(n)*GRANULARITY_PROGRESS) % self->nPointsEvolution == 0 )
       self->UpdateProgress(float(n)/float(self->nPointsEvolution));
 
     float T=self->step();
@@ -429,7 +449,7 @@ void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
     self->pdfIntensityIn->setMemory((int)(5*self->tree.size()));
     self->pdfInhomoIn->setMemory((int)(5*self->tree.size()));
 
-    if( T==INF )
+    if( T==static_cast<float>(INF) )
       {
       vtkErrorWithObjectMacro(self, "FastMarching: nowhere else to go. End of evolution." );
       break;
@@ -464,6 +484,9 @@ void vtkPichonFastMarching::show(float r)
   if( knownPoints.size()<1 )
     return;
 
+  if (!this->checkImagePointers())
+    return;
+
   int oldIndex = nPointsBeforeLeakEvolution;
   int newIndex = (int)((knownPoints.size()-1)*r);
 
@@ -488,7 +511,11 @@ void vtkPichonFastMarching::show(float r)
 
 void vtkPichonFastMarching::setActiveLabel(int _label)
 {
-  this->label=_label;
+  if (this->label != _label)
+    {
+    this->label=_label;
+    this->Modified();
+    }
 }
 
 //----------------------------------------------------------------------------
@@ -499,42 +526,125 @@ void vtkPichonFastMarching::setActiveLabel(int _label)
 // the datas data types.
 void vtkPichonFastMarching::ExecuteDataWithInformation(vtkDataObject *output, vtkInformation* outInfo)
 {
+  if (this->invalidInputs)
+    {
+    this->SetErrorCode(vtkErrorCode::UserError);
+    vtkErrorMacro("Call init() with valid dimensions, depth, and spacing before updating.");
+    return;
+    }
+
   vtkImageData *inData = vtkImageData::SafeDownCast(this->GetInput());
-  vtkImageData *outData = this->AllocateOutputData(output, outInfo);
+  vtkImageData *outData = vtkImageData::SafeDownCast(output);
+  if (!inData || !outData || !inData->GetPointData()->GetScalars())
+    {
+    this->invalidate("Fast marching requires an allocated input image and an output image.");
+    return;
+    }
 
-  int outExt[6], s;
+  int outExt[6];
   outInfo->Get(vtkStreamingDemandDrivenPipeline::WHOLE_EXTENT(), outExt);
-  void *inPtr = inData->GetScalarPointerForExtent(outExt);
-  void *outPtr = outData->GetScalarPointerForExtent(outExt);
-
-  int x1;
-
-  x1 = this->GetImageDataInput(0)->GetNumberOfScalarComponents();
-  if (x1 != 1)
+  const int expectedExtent[6] = {0, dimX - 1, 0, dimY - 1, 0, dimZ - 1};
+  if (!std::equal(outExt, outExt + 6, expectedExtent)
+    || !std::equal(inData->GetExtent(), inData->GetExtent() + 6, expectedExtent))
     {
-      vtkErrorMacro("Input has "<<x1<<" instead of 1 scalar component.");
-      invalidInputs = true;
-      return;
+    this->invalidate("Input extent must start at zero and match the dimensions passed to init().");
+    return;
     }
 
-  /* Need short data */
-  s = inData->GetScalarType();
-  if (s != VTK_SHORT)
+  vtkDataArray* inputScalars = inData->GetPointData()->GetScalars();
+  if (inputScalars->GetDataType() != VTK_SHORT || inputScalars->GetNumberOfComponents() != 1
+    || inputScalars->GetNumberOfTuples() != dimXYZ)
     {
-      vtkErrorMacro("Input scalars are type "<< s
-            << " instead of "<< VTK_SHORT);
-      invalidInputs = true;
-      return;
+    this->invalidate("Input must contain one signed-short scalar per voxel.");
+    return;
     }
 
-  vtkPichonFastMarchingExecute(this, inData, (short *)inPtr,
-             outData, (short *)(outPtr), outExt);
+  if (!this->initialized)
+    {
+    double range[2];
+    inputScalars->GetRange(range);
+    if (range[0] < 0 || range[1] > this->depth)
+      {
+      this->invalidate("Input intensities must be between zero and the depth passed to init().");
+      return;
+      }
+    }
 
+  vtkDataArray* outputScalars = outData->GetPointData()->GetScalars();
+  if (outputScalars)
+    {
+    if (outputScalars->GetDataType() != VTK_SHORT || outputScalars->GetNumberOfComponents() != 1
+      || outputScalars->GetNumberOfTuples() != dimXYZ)
+      {
+      this->invalidate("Existing output must contain one signed-short scalar per voxel; provide a fresh output to change its size.");
+      return;
+      }
+    // AllocateScalars may replace shared arrays, losing existing labels or previews.
+    outData->SetExtent(outExt);
+    }
+  else
+    {
+    if (this->initialized)
+      {
+      this->invalidate("Output was replaced during evolution; call init() before continuing.");
+      return;
+      }
+    this->AllocateOutputData(outData, outInfo, outExt);
+    outData->GetPointData()->GetScalars()->Fill(0);
+    }
+
+  short* inPtr = static_cast<short*>(inData->GetScalarPointer());
+  short* outPtr = static_cast<short*>(outData->GetScalarPointer());
+  if (this->initialized && (inPtr != this->indata || outPtr != this->outdata))
+    {
+    this->invalidate("Image buffers were replaced during evolution; call init() before continuing.");
+    return;
+    }
+  vtkPichonFastMarchingExecute(this, inData, inPtr, outData, outPtr, outExt);
+}
+
+int vtkPichonFastMarching::RequestUpdateExtent(vtkInformation*, vtkInformationVector** inputVector,
+                                            vtkInformationVector*)
+{
+  vtkInformation* inputInfo = inputVector[0]->GetInformationObject(0);
+  inputInfo->Set(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT(),
+                inputInfo->Get(vtkStreamingDemandDrivenPipeline::WHOLE_EXTENT()), 6);
+  return 1;
+}
+
+void vtkPichonFastMarching::invalidate(const char* message)
+{
+  this->invalidInputs = true;
+  this->SetErrorCode(vtkErrorCode::UserError);
+  vtkErrorMacro(<< message);
+}
+
+bool vtkPichonFastMarching::checkImagePointers()
+{
+  vtkImageData* input = this->GetImageDataInput(0);
+  vtkImageData* output = this->GetOutput();
+  if (!this->initialized || !input || !output
+    || !input->GetPointData()->GetScalars() || !output->GetPointData()->GetScalars()
+    || input->GetScalarPointer() != this->indata || output->GetScalarPointer() != this->outdata)
+    {
+    this->invalidate("Initialize image buffers with Update() before this operation; call init() if buffers were replaced.");
+    return false;
+    }
+  return true;
 }
 
 void vtkPichonFastMarching::setNPointsEvolution( int n )
 {
-  nPointsEvolution=n;
+  if (n < 0)
+    {
+    vtkErrorMacro("The number of growth points cannot be negative.");
+    return;
+    }
+  if (nPointsEvolution != n)
+    {
+    nPointsEvolution=n;
+    this->Modified();
+    }
 }
 
 void vtkPichonFastMarching::PrintSelf(ostream& os, vtkIndent indent)
@@ -723,29 +833,99 @@ FMleaf vtkPichonFastMarching::removeSmallest( void ) {
 ///////////////////////////////////////////////////////////////////////
 
 vtkPichonFastMarching::vtkPichonFastMarching()
+  : invalidInputs(true)
+  , powerSpeed(1.0)
+  , nNeighbors(6)
+  , arrayShiftNeighbor{}
+  , arrayDistanceNeighbor{}
+  , tmpNeighborhood{}
+  , dx(1.0f)
+  , dy(1.0f)
+  , dz(1.0f)
+  , invDx2(1.0f)
+  , invDy2(1.0f)
+  , invDz2(1.0f)
+  , initialized(false)
+  , firstCall(true)
+  , node(nullptr)
+  , inhomo(nullptr)
+  , median(nullptr)
+  , outdata(nullptr)
+  , indata(nullptr)
+  , dimX(0)
+  , dimY(0)
+  , dimZ(0)
+  , dimXY(0)
+  , dimXYZ(0)
+  , m11(1.0f), m12(0.0f), m13(0.0f), m14(0.0f)
+  , m21(0.0f), m22(1.0f), m23(0.0f), m24(0.0f)
+  , m31(0.0f), m32(0.0f), m33(1.0f), m34(0.0f)
+  , m41(0.0f), m42(0.0f), m43(0.0f), m44(1.0f)
+  , label(1)
+  , depth(0)
+  , nPointsEvolution(0)
+  , nPointsBeforeLeakEvolution(-1)
+  , nEvolutions(-1)
+  , pdfIntensityIn(nullptr)
+  , pdfInhomoIn(nullptr)
+  , firstPassThroughShow(false)
 {
-  initialized=false;
-  invalidInputs=true;
-
-  node = nullptr;
-  inhomo = nullptr;
-  median = nullptr;
-
-  pdfIntensityIn = nullptr;
-  pdfInhomoIn = nullptr;
 }
 
 void vtkPichonFastMarching::init(int _dimX, int _dimY, int _dimZ, double _depth, double _dx, double _dy, double _dz)
 {
+  invalidInputs = true;
+  initialized = false;
+  firstCall = true;
+  firstPassThroughShow = false;
+  indata = nullptr;
+  outdata = nullptr;
+  tree.clear();
+  knownPoints.clear();
+  seedPoints.clear();
+  pendingSeedStatistics.clear();
+  nPointsEvolution = 0;
+  nPointsBeforeLeakEvolution = -1;
+  nEvolutions = -1;
+  this->SetErrorCode(vtkErrorCode::NoError);
+  this->Modified();
+
+  const int maximum = std::numeric_limits<int>::max();
+  if (_dimX <= 2 * BAND_OUT || _dimY <= 2 * BAND_OUT || _dimZ <= 2 * BAND_OUT
+    || _dimX > maximum / _dimY || _dimX * _dimY > maximum / _dimZ)
+    {
+    this->invalidate("Image dimensions must exceed the excluded border and their product must fit in an int.");
+    return;
+    }
+  if (!vtkMath::IsFinite(_depth) || _depth < 0 || _depth > maximum - 1)
+    {
+    this->invalidate("Depth must be finite and between zero and INT_MAX-1.");
+    return;
+    }
+
   powerSpeed = 1.0;
 
   this->dx=(float)_dx;
   this->dy=(float)_dy;
   this->dz=(float)_dz;
 
+  if (!vtkMath::IsFinite(dx) || !vtkMath::IsFinite(dy) || !vtkMath::IsFinite(dz)
+    || dx <= 0 || dy <= 0 || dz <= 0)
+    {
+    this->invalidate("Spacing must be positive and representable as finite floats.");
+    return;
+    }
+
   invDx2 = (float)(1.0/(dx*dx));
   invDy2 = (float)(1.0/(dy*dy));
   invDz2 = (float)(1.0/(dz*dz));
+
+  if (!vtkMath::IsFinite(invDx2) || !vtkMath::IsFinite(invDy2) || !vtkMath::IsFinite(invDz2)
+    || invDx2 <= 0 || invDy2 <= 0 || invDz2 <= 0)
+    {
+    this->invalidate("Spacing is outside the supported numeric range.");
+    return;
+    }
 
   nNeighbors=6; // 6 or 26
   //note: there seem to be some problems with discr < 0
@@ -817,54 +997,32 @@ void vtkPichonFastMarching::init(int _dimX, int _dimY, int _dimZ, double _depth,
   arrayShiftNeighbor[26] = -1-dimX+dimXY;
   arrayDistanceNeighbor[26] = sqrt( dx*dx + dy*dy + dz*dz );
 
+  for (int neighbor = 1; neighbor <= 26; ++neighbor)
+    if (!vtkMath::IsFinite(arrayDistanceNeighbor[neighbor]))
+      {
+      this->invalidate("Neighbor distances are outside the supported numeric range.");
+      return;
+      }
+
   this->depth = (int) _depth;
 
+  // Replace storage only after all allocations succeed.
+  auto newNode = std::make_unique<FMnode[]>(dimXYZ);
+  auto newInhomo = std::make_unique<int[]>(dimXYZ);
+  auto newMedian = std::make_unique<int[]>(dimXYZ);
+  auto newIntensityPDF = std::make_unique<PichonFastMarchingPDF>(depth);
+  auto newInhomoPDF = std::make_unique<PichonFastMarchingPDF>(depth);
   delete[] node;
-  node = new FMnode[ dimX*dimY*dimZ ];
-  if(node==nullptr)
-    {
-      vtkErrorMacro("Error in void vtkPichonFastMarching::init(), not enough memory for allocation of 'node'");
-      return;
-    }
-
+  node = newNode.release();
   delete[] inhomo;
-  inhomo = new int[ dimX*dimY*dimZ ];
-  if(inhomo==nullptr)
-    {
-      vtkErrorMacro("Error in void vtkPichonFastMarching::init(), not enough memory for allocation of 'inhomo'");
-      return;
-    }
-
+  inhomo = newInhomo.release();
   delete[] median;
-  median = new int[ dimX*dimY*dimZ ];
-  if(median==nullptr)
-    {
-      vtkErrorMacro("Error in void vtkPichonFastMarching::init(), not enough memory for allocation of 'median'");
-      return;
-    }
-
+  median = newMedian.release();
   delete pdfIntensityIn;
-  pdfIntensityIn = new PichonFastMarchingPDF( (int) _depth );
-  if(pdfIntensityIn==nullptr)
-    {
-      vtkErrorMacro("Error in void vtkPichonFastMarching::init(), not enough memory for allocation of 'pdfIntensityIn'");
-      return;
-    }
-
+  pdfIntensityIn = newIntensityPDF.release();
   delete pdfInhomoIn;
-  pdfInhomoIn = new PichonFastMarchingPDF( (int) _depth );
-  if(pdfInhomoIn==nullptr)
-    {
-      vtkErrorMacro("Error in void vtkPichonFastMarching::init(), not enough memory for allocation of 'pdfInhomoIn'");
-      return;
-    }
-
-  initialized=false; // we will need one pass in the execute
-  // function before we are properly initialized
-
-  firstCall = true;
-
-  invalidInputs = false; // so far so good
+  pdfInhomoIn = newInhomoPDF.release();
+  invalidInputs = false;
 }
 
 void vtkPichonFastMarching::setInData(short* data)
@@ -1181,30 +1339,19 @@ int vtkPichonFastMarching::addSeed( float r, float a, float s )
     return 0;
   }
 
-  int I, J, K;
-
-  I = (int) ( m11*r + m12*a + m13*s + m14*1 );
-  J = (int) ( m21*r + m22*a + m23*s + m24*1 );
-  K = (int) ( m31*r + m32*a + m33*s + m34*1 );
-
-  if ( (I>=1) && (I<(dimX-1))
-       &&  (J>=1) && (J<(dimY-1))
-       &&  (K>=1) && (K<(dimZ-1)) )
-    {
-      seedPoints.push_back( I+J*dimX+K*dimXY );
-
-      // use neighbors to create statistics
-      for(int n=0;n<=26;n++)
-    collectInfoSeed( I+J*dimX+K*dimXY+shiftNeighbor(n) );
-
-      // note: the neighbors will be put in TRIAL by setseed
-
-      return 1;
-    } else {
-      std::cout << "Point is outside image volume" << endl;
-    }
-
-  return 0; // we're trying to put a seed outside of the volume
+  const double ijk[3] = {
+    m11*r + m12*a + m13*s + m14,
+    m21*r + m22*a + m23*s + m24,
+    m31*r + m32*a + m33*s + m34};
+  for (double coordinate : ijk)
+    if (!vtkMath::IsFinite(coordinate)
+      || coordinate < std::numeric_limits<int>::min()
+      || coordinate > std::numeric_limits<int>::max())
+      {
+      vtkErrorMacro("Seed coordinates must be finite and representable as integers.");
+      return 0;
+      }
+  return this->addSeedIJK(static_cast<int>(ijk[0]), static_cast<int>(ijk[1]), static_cast<int>(ijk[2]));
 }
 
 
@@ -1221,11 +1368,9 @@ int vtkPichonFastMarching::addSeedIJK( int I, int J, int K )
     {
       seedPoints.push_back( I+J*dimX+K*dimXY );
 
-      // use neighbors to create statistics
-      for(int n=0;n<=26;n++)
-        collectInfoSeed( I+J*dimX+K*dimXY+shiftNeighbor(n) );
-
-      // note: the neighbors will be put in TRIAL by setseed
+      // Image pointers and neighborhood caches become valid during Update().
+      pendingSeedStatistics.push_back( I+J*dimX+K*dimXY );
+      this->Modified();
 
       return 1;
     } else {
@@ -1237,40 +1382,26 @@ int vtkPichonFastMarching::addSeedIJK( int I, int J, int K )
 
 int vtkPichonFastMarching::addSeedsFromImage(vtkImageData* label)
 {
-  // here the assumption is that the label image is always short pixel type
-  // The filter is to be used from Editor effects, and the label is always
-  // short, so for this use case it's a valid assumption.
-  int nSeeds = 0;
-  int scalarType = label->GetScalarType();
-  if(scalarType == VTK_SHORT || scalarType == VTK_UNSIGNED_SHORT)
-  {
-    short* bufferPointer = (short*) label->GetPointData()->GetScalars()->GetVoidPointer(0);
-    vtkIdType inc[3];
-    label->GetIncrements(inc);
-    int extent[6];
-    label->GetExtent(extent);
-
-    for(int k=0;k<extent[5]+1;k++)
+  vtkDataArray* scalars = label ? label->GetPointData()->GetScalars() : nullptr;
+  if (invalidInputs || !scalars
+    || (scalars->GetDataType() != VTK_SHORT && scalars->GetDataType() != VTK_UNSIGNED_SHORT)
+    || scalars->GetNumberOfComponents() != 1
+    || scalars->GetNumberOfTuples() != label->GetNumberOfPoints())
     {
-      for(int j=0;j<extent[3]+1;j++)
-      {
-        for(int i=0;i<extent[1]+1;i++)
-        {
-          if(bufferPointer[k*inc[2]+j*inc[1]+i])
-          {
-            this->addSeedIJK(i,j,k);
-            nSeeds++;
-          }
-        }
-      }
-    }
-  }
-  else
-  {
-    std::cerr << "ERROR: vtkPichonFastMarching: seed label image must be of type SHORT or UNSIGNED SHORT!" << std::endl;
+    vtkErrorMacro("Initialize the filter and provide a seed image with one short or unsigned-short scalar per voxel.");
     return 0;
-  }
+    }
 
+  int nSeeds = 0;
+  const int* extent = label->GetExtent();
+  for (vtkIdType k = extent[4]; k <= extent[5]; ++k)
+    for (vtkIdType j = extent[2]; j <= extent[3]; ++j)
+      {
+      const short* row = static_cast<short*>(label->GetScalarPointer(extent[0], j, k));
+      for (vtkIdType i = extent[0]; i <= extent[1]; ++i)
+        if (row[i - extent[0]] != 0)
+          nSeeds += this->addSeedIJK(i, j, k);
+      }
   return nSeeds;
 }
 
@@ -1289,6 +1420,11 @@ int vtkPichonFastMarching::cxxMajorVersion(void)
 
 void vtkPichonFastMarching::tweak(char *name, double value)
 {
+  if (invalidInputs || !name)
+    {
+    vtkErrorMacro("Call init() before setting fast marching parameters.");
+    return;
+    }
   if( strcmp( name, "sigma2SmoothPDF" )==0 )
     {
       pdfIntensityIn->sigma2SmoothPDF=value;

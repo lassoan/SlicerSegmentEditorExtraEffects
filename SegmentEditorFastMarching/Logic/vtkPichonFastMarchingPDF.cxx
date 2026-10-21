@@ -12,6 +12,9 @@
 
 // STD includes
 #include <iostream>
+#include <limits>
+#include <memory>
+#include <stdexcept>
 
 #ifdef _WIN32 // WINDOWS
 
@@ -40,27 +43,21 @@
 
 PichonFastMarchingPDF::PichonFastMarchingPDF( int _realizationMax )
 {
+  if (_realizationMax < 0 || _realizationMax == std::numeric_limits<int>::max())
+    {
+    throw std::invalid_argument("Histogram maximum must be between 0 and INT_MAX-1");
+    }
+
   sigma2SmoothPDF=0.25;
 
   this->realizationMax=_realizationMax;
 
-  bins = new int [realizationMax+1];
-  if(bins==nullptr)
-    {
-    vtkGenericWarningMacro("Error in vtkFastMarching, PichonFastMarchingPDF::PichonFastMarchingPDF(...), not enough memory for allocation of 'bins'");
-    }
-
-  smoothedBins = new double [realizationMax+1];
-  if(smoothedBins==nullptr)
-    {
-    vtkGenericWarningMacro("Error in vtkFastMarching, PichonFastMarchingPDF::PichonFastMarchingPDF(...), not enough memory for allocation of 'smoothedBins'");
-    }
-
-  coefGauss = new double[realizationMax+1];
-  if(bins==nullptr)
-    {
-    vtkGenericWarningMacro("Error in vtkFastMarching, PichonFastMarchingPDF::PichonFastMarchingPDF(...), not enough memory for allocation of 'bins'");
-    }
+  std::unique_ptr<int[]> newBins(new int[realizationMax+1]);
+  std::unique_ptr<double[]> newSmoothedBins(new double[realizationMax+1]);
+  std::unique_ptr<double[]> newCoefGauss(new double[realizationMax+1]);
+  bins = newBins.release();
+  smoothedBins = newSmoothedBins.release();
+  coefGauss = newCoefGauss.release();
 
   reset();
 
@@ -89,7 +86,11 @@ void PichonFastMarchingPDF::reset( void )
   sigma2=mean=0.0;
 
   for(int k=0;k<=realizationMax;k++)
+    {
     bins[k]=0;
+    smoothedBins[k]=0.0;
+    coefGauss[k]=0.0;
+    }
 
   nRealInBins=0;
 }
@@ -142,7 +143,7 @@ void PichonFastMarchingPDF::update( void )
       bins[r]++;
 
       m1+=r;
-      m2+=r*r;
+      m2+=double(r)*r;
     }
 
   if(memorySize!=-1)
@@ -155,7 +156,7 @@ void PichonFastMarchingPDF::update( void )
 
       bins[r]--;
       m1-=r;
-      m2-=r*r;
+      m2-=double(r)*r;
     }
     }
 
@@ -178,7 +179,7 @@ void PichonFastMarchingPDF::update( void )
 
   // create lookup table for smoothing
   for(int k=0;k<=realizationMax;k++)
-    coefGauss[k]=exp(-0.5*double(k*k)/sigma2Smooth);
+    coefGauss[k]=exp(-0.5*double(k)*k/sigma2Smooth);
 
   {
 
@@ -206,6 +207,12 @@ void PichonFastMarchingPDF::update( void )
 
 void PichonFastMarchingPDF::addRealization( int k )
 {
+  if (k < 0 || k > realizationMax)
+    {
+    vtkGenericWarningMacro("Histogram sample " << k << " is outside 0.." << realizationMax);
+    return;
+    }
+
   //assert(vtkMath::IsFinite(k)!=0);
   if(!(vtkMath::IsFinite(k)!=0))
     {
