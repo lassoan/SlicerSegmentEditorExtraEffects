@@ -67,6 +67,8 @@ public:
   vtkTypeMacro(vtkPichonFastMarching,vtkImageAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  // Reset evolution state, keeping labels in an existing compatible output image.
+  // For an empty restart, supply a new output image before Update().
   void init(int dimX, int dimY, int dimZ, double depth, double dx, double dy, double dz);
 
   void setActiveLabel(int label);
@@ -86,6 +88,7 @@ public:
              float m31, float m32, float m33, float m34,
              float m41, float m42, float m43, float m44);
 
+  // Queue seeds; Update() samples them after initializing image buffers and caches.
   int addSeed( float r, float a, float s );
   int addSeedIJK( int, int, int );
   int addSeedsFromImage(vtkImageData*);
@@ -101,6 +104,7 @@ protected:
   ~vtkPichonFastMarching() override;
 
   void ExecuteDataWithInformation(vtkDataObject *, vtkInformation *) override;
+  int RequestUpdateExtent(vtkInformation *, vtkInformationVector **, vtkInformationVector *) override;
 
 
   friend void vtkPichonFastMarchingExecute(vtkPichonFastMarching *self,
@@ -111,6 +115,9 @@ protected:
 private:
   //pb wrap  vtkPichonFastMarching()(const vtkPichonFastMarching&);
   //pb wrap  void operator=(const vtkPichonFastMarching&);
+
+  void invalidate(const char* message);
+  bool checkImagePointers();
 
   bool invalidInputs;
 
@@ -179,6 +186,7 @@ private:
 
   VecInt seedPoints;
   /// vector<int> seedPoints
+  VecInt pendingSeedStatistics;
 
   /// minheap used by the fast marching algorithm
   VecFMleaf tree;
